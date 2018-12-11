@@ -1,0 +1,371 @@
+---
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+title: "ASI Coursework"
+author: "Margaret Duff"
+date: "30 November 2018"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Fatigue of materials
+
+Materials which are subject to cyclic loading are susceptible to cumulative damage and eventual failure through an irreversible process called \textit{fatigue.} Prediction of such fatigue  is important in mechanical and structural Engineering practice.
+
+The fatigue characteristics of materials are established through fatigue tests which are usually performed on small flat plates called coupons. The levels of stress (force per unit area) as well as the number of cycles to failure are recorded for each test. While the stress levels $S_i$ are controlled during the test,  the number of cycles to failure $N_i$ exhibits a random behaviour due to inherent microstructural inhomogeneity in the material properties and also due to uncontrolled differences  in test conditions. 
+
+When a test is stopped before the coupon fails,  then the coupon is marked as a  \emph{runout}. Runouts can be treated in terms of the likelihood exactly in the same way as censored observations.
+
+Let   $N_i$ denote the number cycles until failure in coupon $i$ and $s_i$ be the corresponding stress level (in Mega Pascals) applied.  We model $N_i$ as continuous using the following probability model:
+
+$$N_i=\alpha\,(s_i-\gamma)^\delta\,\epsilon_i\,,\qquad \mbox{where}\quad s_i>\gamma$$
+and  $\epsilon_i$ is a random error such that
+
+$$\epsilon_i\sim \mbox{Weibull}(\mbox{shape}=1/\sigma,\mbox{scale}=1)$$ 
+The constants $\alpha>0$, $\delta\in R$, $\gamma>0$  and $\sigma>0$ are unknown parameters. Empirical results suggest that coupons tested below the stress level $\gamma$ will never fail. The unknown parameter $\gamma$ is therefore called the \textbf{fatigue limit.} Consider the following data obtained in a series of 26 tests to study the fatigue of a nickel base supperalloy
+ 
+```{r}
+fatigue<- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")
+head(fatigue)
+```
+
+
+```{r,echo=FALSE,message=FALSE,fig.width=7,fig.height=4}
+library(ggplot2)
+library(dplyr)
+library(forcats)
+fatigue<-fatigue %>% mutate(ro=factor(ro)) %>% mutate(ro=fct_recode(ro,"Failure"="0","Runout"="1"))
+p1 <- ggplot(fatigue, aes(N, s,colour=ro)) + geom_point() +  labs(x = "Number of Cycles (Log scale)", y = "Stress (MPa)") + scale_y_continuous(breaks = c(80, 100, 120,140))
+p2<-p1 + scale_x_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),labels = scales::trans_format("log10", scales::math_format(10^.x)))
+p2+scale_color_manual(values=c(Failure="black",Runout="grey"))
+```
+
+The dataset only contains 3 variables: the number of cycles is in \texttt{N}, the stress levels is in \texttt{s} and the runout indicator is in \texttt{ro}. 
+
+\newpage
+
+ 1. Use \texttt{optim} to find the maximum likelihood estimate of $\bm{\theta}=(\log(\alpha),\delta,\log(\sigma))^\top$ for an arbitary value of $\gamma$ that you can choose. The chosen value of $\gamma>0$ should be below the minimum of all stress values that gave rise to a failure, that is, ignoring runouts. Compute  asymptotic 95\% confidence intervals for each of the unknown parameters in $\bm{\theta}$. Now try with different values of $\gamma$ and comment on the sensitivity of the results to the chosen value of $\gamma$. 
+ 
+ 2. How would you estimate the vector of unknown parameters $\bm{\theta_*}=(\log(\alpha),\delta,\log(\sigma),\gamma)^\top$?
+ 
+3. Of great engineering interest are the lower quantiles of the fatigue as a function of stress. We will focus on the lower 10\%  quantile of $N$ which in this case is given by 
+$$N_{0.1}=\alpha\,(s_i-\gamma)^\delta\,z^\sigma_{0.1}$$
+where $z_{0.1}$ is the lower 10\%  quantile of a  Weibull with unit shape and unit scale, that is, an exponential distribution with unit rate. By plugging in estimated values of the unknown parameters, estimate the lower 10\%  quantile curve of $N$ (curve as a function of the stress levels $s$) and plot it together with the data. In the same plot, also add the corresponding median curve which is obtained by using $z_{0.5}$ above, which is the median of an exponential distribution with unit rate.
+
+ 
+ 4. The above model assumes that all coupons have the same unknown  fatigue limit $\gamma$. Consider now the following random effects model that allows the fatigue limit to be different for each coupon. This is achived by modelling the fatigue limit as an unobserved random variable $\Gamma$. For coupon $i$,  the conditional distribution of the number of cycles to failure $N_i$ given that  $\Gamma_i=\gamma_i<s_i$ that is, given that the realisation of the fatigue limit for that coupon is below the applied stress level is given by
+ \begin{equation}
+ N_i|\Gamma_i=\gamma_i<s_i\sim \mbox{Weibull}(\mbox{shape}=1/\sigma,\mbox{scale}=\alpha\,(s_i-\gamma_i)^\delta)
+ \end{equation}
+We will assume that $\Gamma_1,\ldots,\Gamma_{26}$ are iid 
+ \begin{equation}
+\mbox{Weibull}(\mbox{shape}=1/\sigma_{\gamma},\mbox{scale}=\exp(\mu_\gamma))
+\end{equation}
+where $\mu_{\gamma}\in R,\sigma_{\gamma}>0$ are unknown parameters.
+Let $\bm{b}=(\gamma_1,\ldots,\gamma_{26})^\top$ and the vector of unknown paramaters is now given by $\bm{\theta}^\top=(\log(\alpha),\delta,\log(\sigma),\mu_\gamma,\log(\sigma_{\gamma}))$ We will assume the following priors: $\log(\alpha),\delta,\log(\sigma),\mu_{\gamma}$ are indpendent and with improper uniform priors while $\sigma_{\gamma}$ is exponential with rate 5 and independent of $\log(\alpha),\delta,\log(\sigma)$ and $\mu_{\gamma}$. Use a  Metropolis-Hastings algorithm to sample from the posterior distribution of $\bm{\theta}$ and the random effects $\bm{b}$. Apart from the guideline points in the previous section, you should consider using uniform (over finite intervals) proposal distributions for moving around the allowed space of the random effects. 
+```{r}
+split_fatigue <- split(fatigue, fatigue$ro)
+broke=as.data.frame(split_fatigue[[1]])
+runoff=as.data.frame(split_fatigue[[2]])
+
+head(broke)
+head(runoff)
+
+```
+
+```{r}
+
+likelihood_broke=function(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,  N,s){
+  likelihood=0
+  gamma=0
+  while(gamma<s){ 
+  likelihood=likelihood+ dweibull(N, 1/exp(log_sigma), exp(log_alpha)*(s-gamma)^delta)*pweibull(gamma, 1/exp(log_sigma_gamma), exp(mu_gamma))
+    gamma=gamma+1
+  }
+  return(likelihood)
+}
+
+likelihood_runoff=function(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,  N,s){
+  likelihood=0
+  gamma=0
+  while(gamma<s){
+    likelihood=likelihood+ pweibull(N, 1/exp(log_sigma), exp(log_alpha)*(s-gamma)^delta)*pweibull(gamma, 1/exp(log_sigma_gamma), exp(mu_gamma))
+    gamma=gamma+1
+  }
+  return(likelihood)
+}
+# function to compute log posterior 
+log.post <- function(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,  broke, runoff) { 
+  N_broke=broke$N
+  s_broke=broke$s
+ 
+  N_runoff=runoff$N
+  s_runoff=runoff$s
+  
+  
+  log_pi0_log_alpha=log(1)
+  log_pi0_delta=  log(1)
+  log_pi0_log_sigma=log(1)
+  log_pi0_mu_gamma= log(1)
+  log_pi0_log_sigma_gamma=log(5*exp(-5*exp(log_sigma_gamma)))
+  
+   # we add the priors since we assume they are independent 
+  log_pi0<- log_pi0_log_alpha+log_pi0_delta+log_pi0_log_sigma+log_pi0_mu_gamma+log_pi0_log_sigma_gamma
+  # Now the log likelihood
+  log.lik=0
+  for(i in 1:length(broke$s)){
+    log.lik=log.lik+log(likelihood_broke(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,  broke$N[i],broke$s[i]))
+  }
+  for(i in 1:length(runoff$s)){
+    log.lik=log.lik+log(likelihood_runoff(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,  runoff$N[i],runoff$s[i]))
+  }
+  # now the log posterior = log likelihood +log prior 
+  return(log.lik+log_pi0)
+}
+log.post(3,3,3,3,3,broke, runoff)
+
+
+```
+
+```{r}
+
+# function to compute log posterior 
+log.post_new <- function(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,  broke, runoff) { 
+  N_broke=broke$N
+  s_broke=broke$s
+ 
+  N_runoff=runoff$N
+  s_runoff=runoff$s
+  
+  
+  log_pi0_log_alpha=log(1)
+  log_pi0_delta=  log(1)
+  log_pi0_log_sigma=log(1)
+  log_pi0_mu_gamma= log(1)
+  log_pi0_log_sigma_gamma=log(5*exp(-5*exp(log_sigma_gamma)))
+  
+   # we add the priors since we assume they are independent 
+  log_pi0<- log_pi0_log_alpha+log_pi0_delta+log_pi0_log_sigma+log_pi0_mu_gamma+log_pi0_log_sigma_gamma
+  # Now the log likelihood
+  gamma_broke=rweibull(length(broke$s), 1/exp(log_sigma_gamma), exp(mu_gamma))
+    
+  gamma_runoff=rweibull(length(runoff$s),1/exp(log_sigma_gamma), exp(mu_gamma))
+  check=1
+  log.lik=0
+  for(i in 1:length(broke$s)){
+    if(broke$s[i]- gamma_broke[i]>0){
+      log.lik=log.lik+log(dweibull(broke$N[i],1/exp(log_sigma), exp(log_alpha)*(broke$s[i]-gamma_broke[i])**delta))
+      
+        
+    }else{
+          check=check*0
+        }
+    
+  }
+   for(i in 1:length(runoff$s)){
+    if(broke$s[i]- gamma_runoff[i]>0){
+      log.lik=log.lik+log(pweibull(runoff$N[i],1/exp(log_sigma), exp(log_alpha)*(runoff$s[i]-gamma_runoff[i])**delta))
+      
+        
+    }else{
+          check=check*0
+        }
+    
+  }
+  
+
+  # now the log posterior = log likelihood +log prior 
+  return(log.lik+log_pi0)
+}
+log.post_new(-1,2,1,1,1,broke, runoff=runoff)
+
+
+```
+
+
+```{r}
+nsteps=10000
+
+
+
+
+
+burn.in=1000
+
+MH<-function(log_alpha0, delta0, log_sigma0,mu_gamma0,log_sigma_gamma0, range_log_alpha, range_delta, range_log_sigma,range_mu_gamma,range_log_sigma_gamma, nsteps=nsteps){ 
+  
+
+  
+  accept <- rep(0,nsteps)
+  log_alpha <- rep(0,nsteps)
+  delta=rep(0,nsteps)
+  log_sigma=rep(0,nsteps)
+  mu_gamma=rep(0,nsteps)
+  log_sigma_gamma=rep(0,nsteps)
+  
+  
+
+  log_alpha[1] <- log_alpha0
+  delta[1]=delta0
+  log_sigma[1]=log_sigma0
+  mu_gamma[1]=mu_gamma0
+  log_sigma_gamma[1]=log_sigma_gamma0
+  
+  lp0 <- log.post(log_alpha0, delta0, log_sigma0,mu_gamma0,log_sigma_gamma0,  broke, runoff)
+  print(lp0)
+  for (i in 2:nsteps){
+    current_log_alpha=log_alpha[i-1]
+    current_delta=delta[i-1]
+    current_log_sigma=log_sigma[i-1]
+    current_mu_gamma=mu_gamma[i-1]
+    current_log_sigma_gamma=log_sigma_gamma[i-1]
+    
+    proposed_log_alpha=current_log_alpha+sample(c(-range_log_alpha:range_log_alpha),1) 
+    proposed_delta=current_delta+sample(c(- range_delta :range_delta),1) 
+    proposed_log_sigma=current_log_sigma+sample(c(- range_log_sigma:range_log_sigma),1) 
+    proposed_mu_gamma=current_mu_gamma+sample(c(-range_mu_gamma:range_mu_gamma),1) 
+    proposed_log_sigma_gamma=current_log_sigma_gamma+sample(c(-range_log_sigma_gamma:range_log_sigma_gamma),1) 
+    
+     if (pweibull(80.3,1/exp(proposed_log_sigma_gamma), exp(proposed_mu_gamma) ) <=0.05 ) {
+      # definitely reject the whole vector if it is not possible for gamma<s
+      log_alpha[i] <- current_log_alpha
+      delta[i]=current_delta
+      log_sigma[i]=current_log_sigma
+      mu_gamma[i]=current_mu_gamma
+      log_sigma_gamma[i]=current_log_sigma_gamma
+      
+    } else {
+    
+   #  proceed with Metropolis-Hastings step
+        lp1 <- log.post(proposed_log_alpha,proposed_delta, proposed_log_sigma, proposed_mu_gamma, proposed_log_sigma_gamma, broke, runoff)
+        acc <- exp(min(0,lp1-lp0))
+        #print(acc)
+        if(is.finite(acc)){
+        if (runif(1) <= acc) { # accept
+          
+          log_alpha[i] <- proposed_log_alpha
+          delta[i]=proposed_delta
+          log_sigma[i]=proposed_log_sigma
+          mu_gamma[i]=proposed_mu_gamma
+          log_sigma_gamma[i]=proposed_log_sigma_gamma
+  
+
+          accept[i] <- 1
+          #print('yes')
+          lp0 <- lp1 ## Keep ll0 in sync with th
+        } else { ## reject
+          log_alpha[i] <- current_log_alpha
+          delta[i]=current_delta
+          log_sigma[i]=current_log_sigma
+          mu_gamma[i]=current_mu_gamma
+          log_sigma_gamma[i]=current_log_sigma_gamma
+            
+            
+            lp1 <- lp0 ## Keep ll1 in sync with th 
+        }
+        } else{## reject
+          log_alpha[i] <- current_log_alpha
+          delta[i]=current_delta
+          log_sigma[i]=current_log_sigma
+          mu_gamma[i]=current_mu_gamma
+          log_sigma_gamma[i]=current_log_sigma_gamma
+            
+            
+            lp1 <- lp0 ## Keep ll1 in sync with th 
+      
+      
+    }
+  } 
+
+  } 
+   list(log_alpha=log_alpha, delta=delta, log_sigma=log_sigma,mu_gamma=mu_gamma,log_sigma_gamma=log_sigma_gamma, ar=mean(accept))
+}
+
+
+mh=MH(-1,2,1,1,1,1,1,1,1,1,nsteps = nsteps)
+mh$ar
+```
+
+```{r}
+show.plot<- (nsteps-1000):nsteps
+par(mfrow=c(5,1), mar=c(2,2,1,1))
+plot(mh$log_alpha[show.plot],type="l",ylab=expression(log_alpha))
+plot(mh$delta[show.plot],type="l",ylab=expression(delta))
+plot(mh$log_sigma[show.plot],type="l",ylab=expression(log(sigma)))
+plot(mh$mu_gamma[show.plot],type="l",ylab=expression(mu_gamma))
+plot(mh$log_sigma_gamma[show.plot],type="l",ylab=expression(log(sigma_gamma)))
+```
+
+```{r}
+
+par(mfrow=c(3,2),mar=c(4,4,1,1))
+acf(mh$log_alpha[-burn.in],xlab=expression(log(alpha)))
+acf(mh$delta[-burn.in],xlab=expression(delta))
+acf(mh$log_sigma[-burn.in],xlab=expression(log(sigma)))
+acf(mh$mu_gamma[-burn.in],xlab=expression(mu_gamma))
+acf(mh$log_sigma_gamma[-burn.in],xlab=expression(log(sigma_gamma)))
+```
+
+calculate the effective sample size for each paramater and see that the effective smaple size for $\log(\sigma)$ are about half the size than those for $\beta_0$, $\beta_1$ and $\sigma_b$.  
+```{r}
+# note we do discard burn-in iterations
+n.eff <- c(0,0,0,0,0)
+###
+autocor <- acf(mh$log_alpha[-(burn.in)],plot=FALSE)
+t.eff <- 2*sum(autocor[[1]]) - 1
+n.eff[1] <- nsteps/t.eff
+###
+autocor <- acf(mh$delta[-(burn.in)],plot=FALSE)
+t.eff <- 2*sum(autocor[[1]]) - 1
+n.eff[2] <- nsteps/t.eff
+###
+autocor <- acf(mh$log_sigma[-(burn.in)],plot=FALSE)
+t.eff <- 2*sum(autocor[[1]]) - 1
+n.eff[3] <- nsteps/t.eff
+###
+autocor <- acf(mh$mu_gamma[-(burn.in)],plot=FALSE)
+t.eff <- 2*sum(autocor[[1]]) - 1
+n.eff[4] <- nsteps/t.eff
+
+autocor <- acf(mh$log_sigma_gamma[-(burn.in)],plot=FALSE)
+t.eff <- 2*sum(autocor[[1]]) - 1
+n.eff[4] <- nsteps/t.eff
+
+# t.eff is the integrated autocrrelation length
+n.eff
+```
+
+
+We check for correlation between the parameters by plotting graphs... 
+
+```{r}
+par(mfrow=c(5,2),mar=c(2,2,1,1))
+# For visualization purposes we take a random sample
+# of the iterations retained (after discarding burn-in)
+samp<-sample((1:nsteps)[-(burn.in)],nsteps/2)
+
+plot(mh$log_alpha[samp],mh$delta[samp],xlab=expression(log(alpha)),ylab=expression(delta),pch=".",cex=0.1)
+
+plot(mh$log_alpha[samp],mh$log_sigma[samp],xlab=expression(log(alpha)),ylab=expression(log(sigma)),pch=".",cex=0.1)
+
+plot(mh$log_alpha[samp],mh$log_sigma_gamma[samp],xlab=expression(log(alpha)),ylab=expression(log(sigma_gamma)),pch=".",cex=0.1)
+plot(mh$delta[samp],mh$log_sigma[samp],xlab=expression(delta),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$delta[samp],mh$log_sigma_gamma[samp],xlab=expression(delta),ylab=expression(log(sigma_gamma)),pch=".",cex=0.1)
+plot(mh$log_sigma[samp],mh$log_sigma_gamma[samp],xlab=expression(log(sigma)),ylab=expression(log(sigma_gamma)),pch=".",cex=0.1)
+
+plot(mh$mu_gamma[samp],mh$log_alpha[samp],xlab=expression(mu_gamma),ylab=expression(log(alpha)),pch=".",cex=0.1)
+plot(mh$mu_gamma[samp],mh$delta[samp],xlab=expression(mu_gamma),ylab=expression(delta),pch=".",cex=0.1)
+plot(mh$mu_gamma[samp],mh$log_sigma[samp],xlab=expression(mu_gamma),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$mu_gamma[samp],mh$log_sigma_gamma[samp],xlab=expression(mu_gamma),ylab=expression(log(sigma_gamma)),pch=".",cex=0.1)
+
+```
