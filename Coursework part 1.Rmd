@@ -1,7 +1,7 @@
 ---
 output:
-  word_document: default
   pdf_document: default
+  word_document: default
   html_document: default
 ---
 title: "ASI Coursework"
@@ -505,7 +505,8 @@ We check for correlation between the parameters by plotting graphs...
 
 * In general, you should give substantial empirical evidence that the Markov chain constructed has converged to its stationary limiting distribution.
 
-WE use a Kolmogorov- Smirnov Test to check that the Markov chain constucted has converged to its limiting distribution 
+
+We will obtain an independent subsample of our chain and then split it into two subsamples. Using the Kolmogoroc-Smirnov test we chanck to see that they come from the same distribution and hence that the Markov chain has converged. 
 
 ```{r}
 
@@ -514,13 +515,6 @@ ks.test(mh$beta1[-1000:-500], mh$beta1[-500])
 ks.test(mh$log_sigma_b[-1000:-500], mh$log_sigma_b[-500])
 ks.test(mh$log_sigma[-1000:-500], mh$log_sigma[-500])
 ```
-
-
-We will obtain an independent subsample of our chain and then split it into two sibsamples. Using the Kolmogoroc-Smirnov test we chanck to see that they come from the same distribution and hence that the Markov chain has converged. 
-```{r}
-
-```
-
 
 * Produce plots to learn about the shape of the marginal posterior densities of the parameters. You should also investigate the correlation between parameters.
 
