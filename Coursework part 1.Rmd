@@ -221,14 +221,15 @@ n.eff
 ```
 We will also obtain an independent sub-sample of our chain and then split it into two sub-samples. Using the Kolmogorov-Smirnov test we chance to see that they come from the same distribution and hence that the Markov chain has converged. 
 ```{r message=FALSE, warning=FALSE}
-k1=ks.test(mh$beta0[-1000:-500], mh$beta0[-500]); k1$p.value
-k2=ks.test(mh$beta1[-1000:-500], mh$beta1[-500]);k2$p.value
-k3=ks.test(mh$log_sigma_b[-1000:-500], mh$log_sigma_b[-500]);k3$p.value
-k4=ks.test(mh$log_sigma[-1000:-500], mh$log_sigma[-500]);k4$p.value
+k1=ks.test(mh$beta0[-1000:-500], mh$beta0[-500]); 
+k2=ks.test(mh$beta1[-1000:-500], mh$beta1[-500]);
+k3=ks.test(mh$log_sigma_b[-1000:-500], mh$log_sigma_b[-500]);
+k4=ks.test(mh$log_sigma[-1000:-500], mh$log_sigma[-500]);
+c(k1$p.value,k2$p.value,k3$p.value,k4$p.value)
 ```
 We see that in all cases the p-values are large, and thus there is not significant evidence that the two sub-samples are from different distributions. Hence we conclude that the Markov chain has converged. 
 
-Again, we investigate the correlation between the parameters. 
+Again, we investigate the correlation between the parameters by plotting a random sample of the iterations retained after discarding the burn in period . 
 ```{r}
 par(mfrow=c(3,2),mar=c(4,4,1,1))
 samp<-sample((1:nsteps)[-(burn.in)],nsteps/2)# For visualization purposes we take a random sample of the iterations retained (after discarding burn-in)
