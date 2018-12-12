@@ -64,7 +64,7 @@ You may use the functions \texttt{dweibull} and \texttt{pweibull} in R. You shou
 
 5. Using the same model as in question 4, now assume we follow a Bayesian estimation procedure and specify the following prior distributions on the unknown parameters: $\beta_0$ $\beta_1$ and $\log(\sigma)$ are independent and following uniform (improper) priors while 
 $\sigma_b$ is also independent of $\beta_0$ $\beta_1$ and $\log(\sigma)$ and follows a prior exponential distribution with rate $5$. 
-Use a random walk Metropolis-Hastings algorithm to sample from the posterior distribution of $\bm{\theta}$ using the following points as guidelines:
+Use a random walk Metropolis-Hastings algorithm to sample from the posterior distribution of $\theta$ using the following points as guidelines:
 ```{r}
 # function to compute log posterior 
 log.post <- function(beta0, beta1, log_sigma,log_sigma_b,b_tumour, b_dead,  tumour, dead) { 
