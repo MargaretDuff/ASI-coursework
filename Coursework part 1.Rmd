@@ -1,18 +1,15 @@
 ---
+title: "ASI Coursework"
+author: "Margaret Duff"
+date: "30 November 2018"
+
 output:
   pdf_document: default
   word_document: default
   html_document: default
   fontsize: 9pt
-  margin: 2cm
----
-title: "ASI Coursework"
-author: "Margaret Duff"
-date: "30 November 2018"
-output:
-  word_document: default
-  html_document:
-    df_print: paged
+geometry: margin=2cm 
+
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
