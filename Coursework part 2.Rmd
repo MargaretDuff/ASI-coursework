@@ -7,8 +7,8 @@ output:
 title: "ASI Coursework"
 author: "Margaret Duff"
 date: "30 November 2018"
-geometry: margin=2cm
-  
+geometry: margin=1cm
+fontsize: 9pt
     
 ---
 ```{r setup, include=FALSE}
@@ -32,12 +32,10 @@ Let ${b}=(\gamma_1,\ldots,\gamma_{26})^\top$ and the vector of unknown parameter
 We wish to use  a  Metropolis-Hastings algorithm to sample from the posterior distribution of ${\theta}$ and the random effects ${b}$. For an initial step we split the data set into those in which the coupon broke and those which didn't.
 ```{r}
 split_fatigue <- split(fatigue, fatigue$ro)
-broke=as.data.frame(split_fatigue[[1]])
-runoff=as.data.frame(split_fatigue[[2]])
+broke=as.data.frame(split_fatigue[[1]]); runoff=as.data.frame(split_fatigue[[2]])
 ```
 The below computes a log posterior function for the model given parameters: $\log(\alpha), \delta, \log(\sigma), \mu_\gamma, \log(\sigma_\gamma)$ and $\gamma$ 
 ```{r}
-# function to compute log posterior 
 log.post <- function(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,gamma_broke, gamma_runoff, broke, runoff) { 
   log_pi0_log_alpha=log(1);log_pi0_delta=  log(1);log_pi0_log_sigma=log(1);log_pi0_mu_gamma= log(1) #log prior
   log_pi0_log_sigma_gamma=log(5*exp(-5*exp(log_sigma_gamma)))
@@ -112,7 +110,7 @@ list(log_alpha=log_alpha, delta=delta, log_sigma=log_sigma,mu_gamma=mu_gamma,log
 ``` 
 We plot the trace graphs of our retained results minus the burn-in period: 
 
-```{r fig.height=3}
+```{r echo=FALSE, fig.height=3}
 show.plot<- (burn.in):nsteps
 par(mfrow=c(3,2), mar=c(4,4,1,1))
 plot(mh$log_alpha[show.plot],type="l",ylab=expression(log_alpha))
@@ -122,7 +120,8 @@ plot(mh$mu_gamma[show.plot],type="l",ylab=expression(mu_gamma))
 plot(mh$log_sigma_gamma[show.plot],type="l",ylab=expression(log(sigma_gamma)))
 ```
 and the auto-correlation functions:
-```{r fig.height=3}
+
+```{r echo=FALSE, fig.height=3}
 
 par(mfrow=c(3,2),mar=c(4,4,1,1))
 acf(mh$log_alpha[-burn.in],xlab=expression(log(alpha)))

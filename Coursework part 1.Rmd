@@ -7,8 +7,8 @@ output:
   pdf_document: default
   word_document: default
   html_document: default
-  fontsize: 9pt
-geometry: margin=2cm 
+fontsize: 9pt
+geometry: margin=1cm 
 
 ---
 ```{r setup, include=FALSE}
@@ -22,8 +22,7 @@ head(rats)
 To make life easier later we split rats into the two categories based on their status 
 ```{r}
 split_rats <- split(rats, rats$status)
-tumour=as.data.frame(split_rats[[2]])
-dead=as.data.frame(split_rats[[1]])
+tumour=as.data.frame(split_rats[[2]]); dead=as.data.frame(split_rats[[1]])
 ```
 Let $T_i$ be the follow up time to tumor appearance in rat $i$.  Assume the following probability model
 $$T_i\sim \mbox{Weibull}(\mbox{shape}=1/\sigma,\mbox{scale}=\exp(\eta_i))\,,\qquad \eta_i=\beta_0+\beta_1\,x_i$$
@@ -42,7 +41,6 @@ We assume that  censored observations (\texttt{status=0}) do not contribute to t
 Use a random walk Metropolis-Hastings algorithm to sample from the posterior distribution of $\theta=(\beta_0, \beta_1, \log(\sigma), \log(\sigma_b))^T$ using the model above.  We follow a Bayesian estimation procedure and specify the following prior distributions on the unknown parameters: $\beta_0$ $\beta_1$ and $\log(\sigma)$ are independent and following uniform (improper) priors while 
 $\sigma_b$ is also independent of $\beta_0$ $\beta_1$ and $\log(\sigma)$ and follows a prior exponential distribution with rate $5$.  This gives us the following log posterior function 
 ```{r}
-# function to compute log posterior 
 log.post <- function(beta0, beta1, log_sigma,log_sigma_b,b_tumour, b_dead,  tumour, dead) { 
   log_pi0_beta0=log(1);  log_pi0_beta1=  log(1);  log_pi0_log_sigma=log(1);  log_pi0_log_sigma_b= log(5*exp(-5*exp(log_sigma_b))) # log of the priors
     log_pi0_b_tumour=log(dnorm(b_tumour, mean=0, sd=exp(log_sigma_b)));  log_pio_b_dead=log(dnorm(b_dead, mean=0, sd=exp(log_sigma_b))) # log of the priors
@@ -59,18 +57,14 @@ We choose a burn in period of 10,000 but this can always be changed later.
 ```{r}
 nsteps=100000 ; burn.in=10000
 MH<-function(beta0_0,beta1_0, log_sigma_0, log_sigma_b0, b_tumour0, b_dead0, sigma_beta0, sigma_beta1, sigma_log_sigma, sigma_log_sigma_b,   sigma_b, nsteps){ 
-# set up locations to store values at each step 
-  accept <- rep(0,3)
+  accept <- rep(0,3) # set up locations to store values at each step 
   beta0 <- rep(0,nsteps) ;  beta1=rep(0,nsteps);  log_sigma=rep(0,nsteps);  log_sigma_b=rep(0,nsteps)
-  b_tumour=matrix(0,nsteps,length(tumour$rx)) ;  b_dead=matrix(0,nsteps,length(dead$rx)) 
-  #Set intial values
-  beta0[1] <- beta0_0 ;  beta1[1]=beta1_0;  log_sigma[1]=log_sigma_0;  log_sigma_b[1]=log_sigma_b0;  b_tumour[1,]=b_tumour0;  b_dead[1,]=b_dead0
+  b_tumour=matrix(0,nsteps,length(tumour$rx)) ;  b_dead=matrix(0,nsteps,length(dead$rx)) # set up locations to store values at each step 
+  beta0[1] <- beta0_0 ;  beta1[1]=beta1_0;  log_sigma[1]=log_sigma_0;  log_sigma_b[1]=log_sigma_b0;  b_tumour[1,]=b_tumour0;  b_dead[1,]=b_dead0   #Set intial values
 lp0 <- log.post(beta0_0,beta1_0, log_sigma_0, log_sigma_b0,b_tumour0, b_dead0,tumour, dead) # calculate log posterior for these intial values
 for( i in 2:nsteps){ #MH loop
-# set current values 
-    current_beta0=beta0[i-1] ;current_beta1=beta1[i-1];current_log_sigma=log_sigma[i-1];  current_log_sigma_b=log_sigma_b[i-1];current_b_tumour=b_tumour[i-1,]; current_b_dead=b_dead[i-1,]
-#update sigma_b 
-proposed_log_sigma_b=current_log_sigma_b+rnorm(1,0,sigma_log_sigma_b)
+current_beta0=beta0[i-1] ;current_beta1=beta1[i-1];current_log_sigma=log_sigma[i-1];  current_log_sigma_b=log_sigma_b[i-1];current_b_tumour=b_tumour[i-1,]; current_b_dead=b_dead[i-1,] # set current values
+proposed_log_sigma_b=current_log_sigma_b+rnorm(1,0,sigma_log_sigma_b)#update sigma_b 
 lp1 <- log.post(current_beta0,current_beta1, current_log_sigma, proposed_log_sigma_b,current_b_tumour, current_b_dead,tumour, dead) # find log posterior of new values 
 acc <- exp(min(0,lp1-lp0))
 if (runif(1)>=acc| !is.finite(acc)){#reject
@@ -91,10 +85,8 @@ if (runif(1)>=acc| !is.finite(acc)){#reject
           accept[2]=accept[2]+1 # keep track to calculate acceptance rates
           b_tumour[i,] <- proposed_b_tumour;  b_dead[i,]=proposed_b_dead;  #store values   
           lp0 <- lp1 ## update log posterior 
-  #update remaining paramaters
-  proposed_beta0=current_beta0+rnorm(1,0,sigma_beta0)
-  proposed_beta1=current_beta1+rnorm(1,0,sigma_beta1)
-  proposed_log_sigma=current_log_sigma+rnorm(1,0,sigma_log_sigma)
+  proposed_beta0=current_beta0+rnorm(1,0,sigma_beta0); proposed_beta1=current_beta1+rnorm(1,0,sigma_beta1)
+  proposed_log_sigma=current_log_sigma+rnorm(1,0,sigma_log_sigma)#update remaining paramaters
   lp1=log.post(proposed_beta0,proposed_beta1, proposed_log_sigma, proposed_log_sigma_b,proposed_b_tumour, proposed_b_dead,tumour, dead) # calculate new log posterior
   acc <- exp(min(0,lp1-lp0))
   if (runif(1)>=acc| !is.finite(acc)){#reject
@@ -107,15 +99,16 @@ if (runif(1)>=acc| !is.finite(acc)){#reject
 }}}}
   list(beta0=beta0, beta1=beta1, log_sigma_b=log_sigma_b, log_sigma=log_sigma,ar_outer=accept[1]/nsteps, ar_middle=accept[2]/accept[1], ar_inner=accept[3]/accept[2])
 }
-mh=MH(4.2 , 0.14, -1.35,-1.5, rep(0, length(tumour$rx)),rep(0, length(dead$rx)),0.1,0.1,0.1,0.2,0.001, nsteps = nsteps)
+mh=MH(5.0188886, -0.2376741, -1.3687252,-1.5976068, rep(0, length(tumour$rx)),rep(0, length(dead$rx)),0.1,0.1,0.1,0.2,0.001, nsteps = nsteps)
 ```
 For tuning the proposal distribution we use run lengths of about 10000. 100000 would be
 better for the final run. The aim is for an acceptance rate of approximately 25%.
 ```{r}
 mh$ar_outer;mh$ar_middle;mh$ar_inner
 ```
-We check for correlation between the parameters by plotting graphs 
-```{r}
+We check for correlation between the parameters by plotting graphs.
+
+```{r echo=FALSE}
 par(mfrow=c(3,2),mar=c(4,4,1,1))
 samp<-sample((1:nsteps)[-(burn.in)],nsteps/2) # For visualization purposes we take a random sample of the iterations retained (after discarding burn-in)
 plot(mh$beta0[samp],mh$beta1[samp],xlab=expression(beta_0),ylab=expression(beta_1),pch=".",cex=0.1)
@@ -129,17 +122,20 @@ We note the elliptical shaped graphs especially for the plots of $\beta_0, \beta
 ```{r}
 library(mvtnorm)
 mu=c(mean(mh$beta0[-(burn.in)]),mean(mh$beta1[-(burn.in)]), mean(mh$log_sigma[-(burn.in)]) )
-s11=cov(mh$beta0[-(burn.in)], mh$beta0[-(burn.in)])
-s12=cov(mh$beta0[-(burn.in)], mh$beta1[-(burn.in)])
-s13=cov(mh$beta0[-(burn.in)], mh$log_sigma[-(burn.in)])
-s22=cov(mh$beta1[-(burn.in)], mh$beta1[-(burn.in)])
-s23=cov(mh$beta1[-(burn.in)], mh$log_sigma[-(burn.in)])
-s33=cov(mh$log_sigma, mh$log_sigma)
+s11=cov(mh$beta0[-(burn.in)], mh$beta0[-(burn.in)]);s12=cov(mh$beta0[-(burn.in)], mh$beta1[-(burn.in)])
+s13=cov(mh$beta0[-(burn.in)], mh$log_sigma[-(burn.in)]);s22=cov(mh$beta1[-(burn.in)], mh$beta1[-(burn.in)])
+s23=cov(mh$beta1[-(burn.in)], mh$log_sigma[-(burn.in)]);s33=cov(mh$log_sigma, mh$log_sigma)
 covariance= matrix(c(s11,s12,s13,s12,s22,s23,s13,s23,s33), nrow=3, byrow=TRUE)
 ```
-With this proposal distribution we get a new MH sampler, again we tune the parameters the best we can. 
-```{r}
-nsteps=100000; burn.in=1000
+With this new proposal distribution for $(\beta_0, \beta_1, \log(\sigma)$ we get a new MH sampler identical to the previous one, except that when we propose new values in the inner most MH chain we use this excerpt of code:
+
+```{r, eval=FALSE}
+proposed= rmvnorm(1, mean=c(current_beta0, current_beta1, current_log_sigma), lambda*covariance) #update remaining paramaters
+proposed_beta0=proposed[1];  proposed_beta1=proposed[2];  proposed_log_sigma=proposed[3]
+```
+
+```{r echo=FALSE}
+nsteps=100000; burn.in=10000
 MH2<-function(beta0_0,beta1_0, log_sigma_0, log_sigma_b0, b_tumour0, b_dead0, lambda, sigma_log_sigma_b,   sigma_b, nsteps){ 
   accept <- rep(0,3) # for acceptance values of outer, middle and inner chain
   beta0 <- rep(0,nsteps) ;  beta1=rep(0,nsteps)# set up locations to store values at each step 
@@ -186,20 +182,27 @@ if (runif(1)>=acc| !is.finite(acc)){#reject
 }}}}
   list(beta0=beta0, beta1=beta1, log_sigma_b=log_sigma_b, log_sigma=log_sigma,ar_outer=accept[1]/nsteps, ar_middle=accept[2]/accept[1], ar_inner=accept[3]/accept[2])
 }
-mh=MH2(4.2 , 0.14, -1.35,-1.5, rep(0, length(tumour$rx)),rep(0, length(dead$rx)),2.5,0.2,0.001, nsteps = nsteps)
+```
+Using the new MH algorithm and tuning we get
+```{r}
+mh=MH2(5.0188886, -0.2376741, -1.3687252,-1.5976068, b_tumour0 =  rep(0, length(tumour$rx)),b_dead0= rep(0, length(dead$rx)),lambda=2.5,sigma_log_sigma_b = 0.2, sigma_b =0.001, nsteps = nsteps)
 mh$ar_outer;mh$ar_middle;mh$ar_inner
 ```
-We now check that the Markov chain is behaving as we expect. Firstly, the trace plots show some good mixing within the parameters 
-```{r}
+
+We now check that the Markov chain is behaving as we expect. Firstly, the trace plots show some good mixing within the parameters
+
+```{r echo=FALSE, fig.height=3}
 show.plot<- (burn.in):nsteps
-par(mfrow=c(4,1),mar=c(3,4,1,1))
+par(mfrow=c(2,2),mar=c(3,4,1,1))
 plot(mh$beta0[show.plot],type="l",ylab=expression(beta0))
 plot(mh$beta1[show.plot],type="l",ylab=expression(beta1))
 plot(mh$log_sigma[show.plot],type="l",ylab=expression(log(sigma)))
 plot(mh$log_sigma_b[show.plot],type="l",ylab=expression(log(sigma_b)))
 ```
+
 The auto-correlation function plots are also decreasing suggesting that the Markov chain is converging. 
-```{r}
+
+```{r echo=FALSE, fig.height=3}
 par(mfrow=c(2,2),mar=c(4,4,1,1))
 acf(mh$beta0[-burn.in],xlab=expression(beta0))
 acf(mh$beta1[-burn.in],xlab=expression(beta1))
@@ -227,7 +230,8 @@ c(k1$p.value,k2$p.value,k3$p.value,k4$p.value)
 We see that in all cases the p-values are large, and thus there is not significant evidence that the two sub-samples are from different distributions. Hence we conclude that the Markov chain has converged. 
 
 Again, we investigate the correlation between the parameters by plotting a random sample of the iterations retained after discarding the burn in period . 
-```{r}
+
+```{r echo=FALSE}
 par(mfrow=c(3,2),mar=c(4,4,1,1))
 samp<-sample((1:nsteps)[-(burn.in)],nsteps/2)# For visualization purposes we take a random sample of the iterations retained (after discarding burn-in)
 plot(mh$beta0[samp],mh$beta1[samp],xlab=expression(beta_0),ylab=expression(beta_1),pch=".",cex=0.1)
@@ -238,8 +242,19 @@ plot(mh$beta1[samp],mh$log_sigma_b[samp],xlab=expression(beta_1),ylab=expression
 plot(mh$log_sigma[samp],mh$log_sigma_b[samp],xlab=expression(log(sigma)),ylab=expression(log(sigma_b)),pch=".",cex=0.1)
 ```
 It looks like we need a more sophisticated proposal to deal with the correlation of $\log(\sigma_b)$ and the other 3 parameters. 
+
+We also investigate the shape of the marginal posterior densities of the parameters by plotting histograms of the retained values 
+
+```{r echo=FALSE, fig.height=3}
+par(mfrow=c(2,2),mar=c(4,4,1,1))
+hist(mh$beta0[-burn.in], freq = FALSE, breaks = 100)
+hist(mh$beta1[-burn.in], freq = FALSE, breaks = 100)
+hist(mh$log_sigma[-burn.in], freq = FALSE, breaks = 100)
+hist(mh$log_sigma_b[-burn.in], freq = FALSE, breaks = 100)
+```
+The long non symmetric tails on some of the marginal posterior densities suggesting such as on the $\log(\sigma_b)$ graph again suggest a more sophisticated proposal would be useful. 
 We compute a 95% posterior probability interval for the intervention effect $\beta_1$. 
 ```{r}
-quantile(mh$beta1[-(burn.in)], c(.025, 0.975))#95% condfidence interval or beta_1
+quantile(mh$beta1[-(burn.in)], c(.025, 0.975))#95% condfidence interval for beta_1
 ```
 We conclude that 0 is not contained in the 95% posterior probability interval for the intervention effect, suggesting that the intervention has a statistically significant effect. 
