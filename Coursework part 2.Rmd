@@ -42,7 +42,7 @@ log.post <- function(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,gamma_
   log_pi0_gamma_broke=log(dweibull(gamma_broke, 1/exp(log_sigma_gamma), exp(mu_gamma)))#log prior
   log_pi0_gamma_runoff=log(dweibull(gamma_runoff, 1/exp(log_sigma_gamma), exp(mu_gamma)))#log prior
   log_pi0<- log_pi0_log_alpha+log_pi0_delta+log_pi0_log_sigma+log_pi0_mu_gamma+log_pi0_log_sigma_gamma +sum(log_pi0_gamma_runoff)+sum(log_pi0_gamma_broke)# we add the priors since we assume they are independent 
-  log.lik=sum(log(pweibull(broke$N, 1/exp(log_sigma), exp(log_alpha)*(broke$s-gamma_broke)^delta)))+sum(log(dweibull(runoff$N, 1/exp(log_sigma), exp(log_alpha)*(runoff$s-gamma_runoff)^delta)))# Now the log likelihood
+  log.lik=sum(log(pweibull(broke$N, 1/exp(log_sigma), exp(log_alpha)*(broke$s-gamma_broke)^delta, lower.tail=FALSE)))+sum(log(dweibull(runoff$N, 1/exp(log_sigma), exp(log_alpha)*(runoff$s-gamma_runoff)^delta)))# Now the log likelihood
   return(log.lik+log_pi0) # now the log posterior = log likelihood +log prior
 }
 ```

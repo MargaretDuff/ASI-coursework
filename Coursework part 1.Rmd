@@ -45,7 +45,7 @@ log.post <- function(beta0, beta1, log_sigma,log_sigma_b,b_tumour, b_dead,  tumo
   log_pi0_beta0=log(1);  log_pi0_beta1=  log(1);  log_pi0_log_sigma=log(1);  log_pi0_log_sigma_b= log(5*exp(-5*exp(log_sigma_b))) # log of the priors
     log_pi0_b_tumour=log(dnorm(b_tumour, mean=0, sd=exp(log_sigma_b)));  log_pio_b_dead=log(dnorm(b_dead, mean=0, sd=exp(log_sigma_b))) # log of the priors
   log_pi0<- log_pi0_beta0+log_pi0_beta1+log_pi0_log_sigma+log_pi0_log_sigma_b+sum(log_pio_b_dead)+sum(log_pi0_b_tumour)# we add the priors since we assume they are independent 
-  log.lik<-sum(log (dweibull(tumour$time, 1/exp(log_sigma), exp(beta0+beta1*tumour$rx+b_tumour))))+sum(log (pweibull(dead$time, 1/exp(log_sigma), exp(beta0+beta1*dead$rx+b_dead))))# Now the log likelihood
+  log.lik<-sum(log (dweibull(tumour$time, 1/exp(log_sigma), exp(beta0+beta1*tumour$rx+b_tumour))))+sum(log (pweibull(dead$time, 1/exp(log_sigma), exp(beta0+beta1*dead$rx+b_dead), lower.tail=FALSE)))# Now the log likelihood
   return(log.lik+log_pi0)# now the log posterior = log likelihood +log prior 
 }
 ```
@@ -99,7 +99,7 @@ if (runif(1)>=acc| !is.finite(acc)){#reject
 }}}}
   list(beta0=beta0, beta1=beta1, log_sigma_b=log_sigma_b, log_sigma=log_sigma,ar_outer=accept[1]/nsteps, ar_middle=accept[2]/accept[1], ar_inner=accept[3]/accept[2])
 }
-mh=MH(5.0188886, -0.2376741, -1.3687252,-1.5976068, rep(0, length(tumour$rx)),rep(0, length(dead$rx)),0.1,0.1,0.1,0.2,0.001, nsteps = nsteps)
+mh=MH(5.0188886, -0.2376741, -1.3687252,-1.5976068, rep(0, length(tumour$rx)),rep(0, length(dead$rx)),0.1,0.1,0.1,0.25,0.0001, nsteps = nsteps)
 ```
 For tuning the proposal distribution we use run lengths of about 10000. 100000 would be
 better for the final run. The aim is for an acceptance rate of approximately 25%.
@@ -185,14 +185,14 @@ if (runif(1)>=acc| !is.finite(acc)){#reject
 ```
 Using the new MH algorithm and tuning we get
 ```{r}
-mh=MH2(5.0188886, -0.2376741, -1.3687252,-1.5976068, b_tumour0 =  rep(0, length(tumour$rx)),b_dead0= rep(0, length(dead$rx)),lambda=2.5,sigma_log_sigma_b = 0.2, sigma_b =0.001, nsteps = nsteps)
+mh=MH2(5.0188886, -0.2376741, -1.3687252,-1.5976068, b_tumour0 =  rep(0, length(tumour$rx)),b_dead0= rep(0, length(dead$rx)),lambda=2.5,sigma_log_sigma_b = 0.25, sigma_b =0.0001, nsteps = nsteps)
 mh$ar_outer;mh$ar_middle;mh$ar_inner
 ```
 
 We now check that the Markov chain is behaving as we expect. Firstly, the trace plots show some good mixing within the parameters
 
 ```{r echo=FALSE, fig.height=3}
-show.plot<- (burn.in):nsteps
+show.plot<- burn.in:nsteps
 par(mfrow=c(2,2),mar=c(3,4,1,1))
 plot(mh$beta0[show.plot],type="l",ylab=expression(beta0))
 plot(mh$beta1[show.plot],type="l",ylab=expression(beta1))
@@ -257,4 +257,4 @@ We compute a 95% posterior probability interval for the intervention effect $\be
 ```{r}
 quantile(mh$beta1[-(burn.in)], c(.025, 0.975))#95% condfidence interval for beta_1
 ```
-We conclude that 0 is not contained in the 95% posterior probability interval for the intervention effect, suggesting that the intervention has a statistically significant effect.AS per the analysis in part 2,the confidence values for $\beta_1$ being greater than zero suggest that the treatment is having a poitive effect. This is in contrast to previous results and thus perhaps suggests that more investigation is required.  
+We conclude that 0 is not contained in the 95% posterior probability interval for the intervention effect, suggesting that the intervention has a statistically significant effect.AS per the analysis in part 2,the confidence values for $\beta_1$ is less  than zero suggest that the treatment is having a negative effect. 
