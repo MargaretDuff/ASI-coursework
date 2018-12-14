@@ -38,7 +38,7 @@ The survival function of a Weibull with shape $a>0$ and scale $b>0$ is given by
 $$S(t|a,b)=P(T>t|a,b)=\exp\left(-\left(\frac{t}{b}\right)^a\right)\,,\qquad t>0$$
 We assume that  censored observations (\texttt{status=0}) do not contribute to the likelihood with a factor equal to the density of $T$ at the observed $t_i$ but with a factor equal to the survival function evaluated at the observed $t_i$.
 
-Use a random walk Metropolis-Hastings algorithm to sample from the posterior distribution of $\theta=(\beta_0, \beta_1, \log(\sigma), \log(\sigma_b))^T$ using the model above.  We follow a Bayesian estimation procedure and specify the following prior distributions on the unknown parameters: $\beta_0$ $\beta_1$ and $\log(\sigma)$ are independent and following uniform (improper) priors while 
+We use a random walk Metropolis-Hastings algorithm to sample from the posterior distribution of $\theta=(\beta_0, \beta_1, \log(\sigma), \log(\sigma_b))^T$ using the model above.  We follow a Bayesian estimation procedure and specify the following prior distributions on the unknown parameters: $\beta_0$ $\beta_1$ and $\log(\sigma)$ are independent and following uniform (improper) priors while 
 $\sigma_b$ is also independent of $\beta_0$ $\beta_1$ and $\log(\sigma)$ and follows a prior exponential distribution with rate $5$.  This gives us the following log posterior function 
 ```{r}
 log.post <- function(beta0, beta1, log_sigma,log_sigma_b,b_tumour, b_dead,  tumour, dead) { 
@@ -257,4 +257,4 @@ We compute a 95% posterior probability interval for the intervention effect $\be
 ```{r}
 quantile(mh$beta1[-(burn.in)], c(.025, 0.975))#95% condfidence interval for beta_1
 ```
-We conclude that 0 is not contained in the 95% posterior probability interval for the intervention effect, suggesting that the intervention has a statistically significant effect. 
+We conclude that 0 is not contained in the 95% posterior probability interval for the intervention effect, suggesting that the intervention has a statistically significant effect.AS per the analysis in part 2,the confidence values for $\beta_1$ being greater than zero suggest that the treatment is having a poitive effect. This is in contrast to previous results and thus perhaps suggests that more investigation is required.  

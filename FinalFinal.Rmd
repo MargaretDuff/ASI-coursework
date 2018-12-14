@@ -1,0 +1,668 @@
+---
+title: "Final ASI coursework"
+output: pdf_document
+fontsize: 9pt
+geometry: margin=0.5cm 
+header-includes:
+    - \usepackage{bm}
+    - \usepackage{amsmath,amssymb,amsthm,bm}
+    - \usepackage{mleftright}
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+```
+
+# Carcinogenesis study on rats
+We analyse the data of a drug trial on 50 litters of female rats. There were three rats per litter, one that recieved a drug treatment and two recieved a control. 
+```{r}
+library('survival'); library('eha')
+rats <- read.table("http://people.bath.ac.uk/kai21/ASI/rats_data.txt") #load data
+rx <- rats$rx; times <- rats$time; status <- rats$status; status <- as.logical(status)
+```
+Let $T_i$ be the follow up time to tumor appearance in rat $i$.  Assume the following probability model
+$$T_i\sim \mbox{Weibull}(\mbox{shape}=1/\sigma,\mbox{scale}=\exp(\eta_i))\,,\qquad \eta_i=\beta_0+\beta_1\,x_i, \ \ 
+x_i=\left\{
+\begin{array}{cl}
+1 & \mbox{rat $i$ received treatment} \\
+0 & \mbox{rat $i$ received control}\\
+\end{array}
+\right.$$
+We assume that $\{T_1,\ldots,T_n\}$ are independent random variables.
+
+##Problem 1
+We use \texttt{optim} to compute the maximum likelihood estimate of the parameter $\theta^\top=(\beta_0,\beta_1,\log(\sigma))$ as well as the asymptotic standard error of each parameter estimate.
+```{r}
+nll_weibull <- function(theta,rx,times,status){#negative log-likelihood
+  beta0 <- theta[1]; beta1 <- theta[2]; sigma <- exp(theta[3]); eta <- beta0 + beta1*rx
+  -sum(dweibull(times[status],shape = 1/sigma, scale = exp(eta[status]), log = TRUE))-sum(pweibull(times[!status], shape = 1/sigma, scale = exp(eta[!status]),lower.tail = FALSE, log.p = TRUE))
+}
+#MLE with optim- Find the parameters that minimalise the negative log-likelihood, i.e. nll_weibull. Starting from the initial guess theta0 we converge to the minimun with BFGS steps. hessian = TRUE, because we need the Hessian to estimate the information matrix, which gives the standard errors for the confidence interval estimations.
+theta0 <- c(1,1,1) #initial point
+fit_weibull <- optim(par=theta0, fn=nll_weibull, method="BFGS", hessian=TRUE, rx=rx, times=times, status=status)
+fit_weibull$convergence #check convergence
+#the optimal values: beta0, beta1, logsigma
+mle_params <- fit_weibull$par; mle_params
+-fit_weibull$value #loglikelihood value at the mle
+```
+##Problem 2
+We compute a 95\% asymptotic confidence interval for the treatment effect $\beta_1$. We use that $\hat{\theta}\sim N(\theta_t,\mathcal{I}^-1)$, where $\hat{\theta}$ is our MLE, $\theta_t$ is the vector of the true values and $\mathcal{I}^{-1}$ is the information matrix. We approximate the information matrix by the Hessian $\nabla^2 l(\hat{\theta})$, where $l$ is the log-likelihood. To get the confidence interval for $\beta_1$, we standardise our ML estimate $\hat{\beta_1}$:
+$$\mathbb{P}(\beta_{1,t} - x < \hat{\beta_1} \leq \beta_{1,t} + x) = 
+\mathbb{P}\left(-\frac{x}{\sigma_{\beta_1}} < \frac{\hat{\beta_1} - \beta_{1,t}}{\sigma_{\beta_1}} \leq \frac{x}{\sigma_{\beta_1}} \right) = 2\Phi\left(\frac{x}{\sigma_{\beta_1}}\right) - 1 = 0.95,$$
+where $\beta_{1,t}$ denotes the true value of $\beta_1$ and $\Phi$ is the cdf of the standard normal distribution. From the equation above we get $x=1.96\sigma_{\beta_1}$.
+```{r}
+se_weibull <- diag(solve(fit_weibull$hessian))^.5 #standard deviations
+c(fit_weibull$par[2] - 1.96*se_weibull[2], fit_weibull$par[2] + 1.96*se_weibull[2]) #confidence interval for beta1
+```
+Interpretation: $\beta_1$ is supposed to show the effect of the treatment. The mean of the Weibull distribution is proportional to its scale, which is $e^{\beta_0+\beta_1}$ in case of treatment and $e^{\beta_0}$ if there is no treatment. Thus if $\beta_1$ is positive, the mean of the expected follow up time to tumor is bigger in case of treatment. Similarly, a negative $\beta_1$ would show a negative effect (shorter expected follow up time to tumor). The confidence interval shows that with probability 95% $\beta_1$ has a slightly
+negative effect, so this treatment should not be used.
+
+##Problem 3
+We now assume that $$T_i\sim \mbox{log-logistic}(\mbox{shape}=1/\sigma,\mbox{scale}=\exp(\eta_i)).$$ 
+We find the maximum likelihood estimate of the parameter $\bm{\theta}^\top=(\beta_0,\beta_1,\log(\sigma))$ using \texttt{optim}
+as well as the asymptotic standard errors of each parameter estimate. We also compute a  95\% asymptotic confidence interval for the treatment effect $\beta_1$.
+```{r}
+nll_llogis <- function(theta,rx,times,status){#negative loglikelihood
+  beta0 <- theta[1]; beta1 <- theta[2];sigma <- exp(theta[3]);eta <- beta0 + beta1*rx
+  -sum(dllogis(times[status], shape = 1/sigma, scale = exp(eta[status]), log = TRUE)) - sum(pllogis(times[!status], shape = 1/sigma, scale = exp(eta[!status]), lower.tail = FALSE, log.p = TRUE)) 
+}
+theta0 <- c(1,1,1) #initial point
+fit_llogis <- optim(par=theta0, fn=nll_llogis, method="BFGS", hessian=TRUE, rx=rx, times=times, status=status) #mle with optim
+fit_llogis$convergence #check convergence
+fit_llogis$par #the optimal values
+-fit_llogis$value #loglikelihood value at the mle
+se_llogis <- diag(solve(fit_llogis$hessian))^.5 #standard errors
+c(fit_llogis$par[2]-1.96*se_llogis[2],fit_llogis$par[2]+1.96*se_llogis[2])#confidence interval for beta1
+```
+Interpretation: The confidence interval shows again that with probability 95% $\beta_1$ has a slightly negative effect, so this treatment should not be used.
+
+##Problem 4
+Now assume we model the effect of the litters as  random effects as follows:
+$$T_i\sim \mbox{Weibull}(\mbox{shape}=1/\sigma,\mbox{scale}=\exp(\eta_i))\,,\qquad \eta_i=\beta_0+\beta_1\,x_i+b_{litter(i)}$$
+where $litter(i)\in\{1,2,\ldots,49,50\}$ indicates the litter to which rat $i$ belogs to. Assume that the random effects $\{b_1,\ldots,b_{50}\}$ are iid $N(0,\sigma^2_b)$ where $\sigma_b^2$ is unknown. Note that now we have $\bm{\theta}=(\beta_0,\beta_1,\log(\sigma),\log(\sigma_b))^\top$.
+
+
+\renewcommand{\vec}[1]{\mathbf{#1}}
+\newcommand{\partheta}{\bm{\theta}}
+\newcommand{\vecbeta}{\bm{\beta}}
+\newcommand{\veceta}{\bm{\eta}}
+\newcommand{\jointf}{\log\mleft[f(\vec{y}, \vec{b}|\partheta)\mright]}
+
+```{r echo=FALSE, include=FALSE}
+rats <- read.table("http://people.bath.ac.uk/kai21/ASI/rats_data.txt")
+
+nll <- function(t, x, c, theta) {
+  beta0 <- theta[1]; beta1 <- theta[2]; sigma <- exp(theta[3])
+  eta <- beta0 + beta1*x; wshape <- 1/sigma; wscale <- exp(eta)
+  return(-sum(pweibull(t[c], shape=wshape, scale=wscale[c], log.p=TRUE, lower.tail=FALSE),
+              dweibull(t[!c], shape=wshape, scale=wscale[!c], log=TRUE)))
+}
+
+mle.nll <- optim(par=c(1, 1, 1), fn=nll, method="BFGS", control=list(trace=1, maxit=1000), 
+             t=rats$time, x=rats$rx, c=(rats$status == 0))
+mle.nll$par
+```
+Given that $\eta_i$ is a linear in the parameters and random effects, and letting $\veceta = [\eta_1,...,\eta_n]^T$, we have $\veceta = \vec{X}\vecbeta + \vec{Z}\vec{b}$, which is the linear part of our model. Here, $\vecbeta = [\beta_0, \beta_1]^T$, while the matrices $\vec{X}$ and $\vec{Z}$ are constructed using the following:
+```{r}
+X <- model.matrix(~ 1 + rx, data=rats)
+rats$litter <- as.factor(rats$litter); Z <- model.matrix(~ litter - 1, data=rats)
+```
+
+Suppose that we are given $\vec{b}$. If the $i$th observation is censored, then its contribution to $\log\mleft[f(\vec{y} | \vec{b},  \partheta)\mright]$ is equal to $-(t_i/\exp(\eta_i))^{1/\sigma}$. Otherwise (i.e. if observation $i$ is uncensored), the resulting contribution to $\log\mleft[f(\vec{y} | \vec{b},  \partheta)\mright]$ is $$
+  \log\mleft\{\mleft[\frac{1/\sigma}{\exp(\eta_i)}\mright]\mleft[\frac{t_i}{\exp(\eta_i)}\mright]^{\frac1{\sigma} - 1}\mright\} - \mleft(\frac{t_i}{\exp(\eta_i)}\mright)^{\frac1{\sigma}},
+$$ which follows directly from the pdf of the Weibull distribution. Let $c_i = 1$ if observation $i$ is censored ($c_i = 0$ otherwise). Then, following some algebraic rearrangement, there holds: $$
+\log\mleft[f(\vec{y}|\vec{b},\partheta)\mright] = \sum_{i=1}^n \mleft\{c_i\mleft[\mleft(\frac1{\sigma}-1\middle)\middle(\log(t_i) - \eta_i\mright) - \log(\sigma) - \eta_i\mright] - \mleft[\frac{t_i}{\exp(\eta_i)}\mright]^{\frac1{\sigma}}\mright\}$$
+
+Since $\vec{b} \sim N(\vec{0}$, and using the Normal pdf, $\sigma_b^2\vec{I})$, $\log\mleft[f(\vec{b}|\partheta)\mright] = -\sum_{j=1}^{n_b}\mleft\{\log(\sigma_b) + \log(2\pi)/2 + b_j^2/2\sigma_b^2 \mright\}$. The R function ``lfyb`` evaluates the joint log-density $\jointf = \jointf + \log\mleft[f(\vec{b}|\partheta)\mright]$:
+```{r}
+lfyb <- function(theta, y, b, X, Z) {
+  beta <- theta[1:2]; sigma <- exp(theta[3]); sigma_b <- exp(theta[4]) #get parameters
+  eta <- as.numeric(X %*% beta + Z %*% b); wshape <- 1/sigma; wscale <- exp(eta) #scale and shape
+  time <- y$time; censored <- y$status; #get data (exposure times and censorship flag)
+  #log density of y given b, theta
+  lfy_b <- sum(censored*((wshape - 1)*(log(time) - eta) - theta[3] - eta) - (time/wscale)^wshape)
+  lfb <- -sum(theta[4] + log(2*pi)/2 + b^2/(2*sigma_b^2)) #log density of b given theta
+  return(lfy_b + lfb) #log joint density of y, b given theta
+}
+```
+Now, let $L_j = \mleft\{i\in \{1,...,n\} : litter(i) = j\mright\}$. Using the chain rule, we may differentiate the above with respect to $b_j, j \in \{1,...,50\}$, from which (and following some simplification) we obtain:$$
+  \frac{\partial \jointf}{\partial b_j} = \frac1{\sigma} \sum_{i \in L_j} \mleft[\mleft(\frac{t_i}{\exp(\eta_i)}\mright)^{\frac1{\sigma}} - c_i\mright] - \frac{b_j}{\sigma_b^2}, \qquad \frac{\partial^2 \jointf}{\partial b_j^2} = -\frac1{\sigma^2}\sum_{i \in L_j} \mleft[\mleft(\frac{t_i}{\exp(\eta_i)}\mright)^{\frac1{\sigma}}\mright] - \frac1{\sigma_b^2}.
+$$ Further, since the elements of $\vec{b}$ are mutually independent, it follows that, if $k \neq j$, then $\partial^2 \jointf/\partial b_k \partial b_j = 0$, i.e. $\partial\jointf/\partial\vec{b}\partial\vec{b}^T$ is a diagonal matrix. The R functions ``gr_lfyb`` and ``diagH_lfyb`` calculate respectively the gradient and main diagonal vector of $\jointf$ with respect to $\vec{b}$:
+
+```{r}
+gr_lfyb <- function(theta, y, b, X, Z) {
+  beta <- theta[1:2]; sigma <- exp(theta[3]); sigma_b <- exp(theta[4])
+  eta <- as.numeric(X%*%beta + Z%*%b); wshape <- 1/sigma; wscale <- exp(eta)
+  time <- y$time; censored <- y$status
+  gr_lfy_b <- wshape*(t(Z) %*% ((time/wscale)^wshape - censored))
+  return(gr_lfy_b -b/(sigma_b^2)) #gradient
+}
+
+diagH_lfyb <- function(theta, y, b, X, Z) {
+  beta <- theta[1:2]; sigma <- exp(theta[3]); sigma_b <- exp(theta[4])
+  eta <- as.numeric(X %*% beta + Z %*% b); wshape <- 1/sigma; wscale <- exp(eta)
+  time <- y$time;
+  diagH_lfy_b <- -(t(Z) %*% ((time/wscale)^wshape))/(sigma^2)
+  return(diagH_lfy_b -1/(sigma_b^2)) #diagonal of Hessian
+}
+```
+The function ``lal`` evaluates $-\log\mleft[f(\vec{y}|\partheta)\mright]$ using the Laplace approximation to the integral $\int \jointf\mathrm{d}\partheta$. The functions ``gr_lfyb`` and ``diagH_lfyb`` are used when solving the inner optimisation problem in ``lal``. This is more accurate than using finite differences to calculate the gradient and Hessian numerically (which is the default behaviour of ``optim``). It is also much quicker; for example, calculating $\partial\jointf/\partial\vec{b}$ using a central finite difference approximation requires an additional $2n_b$ calls to ``lfyb``, which we are able to avoid by using the exact gradient. 
+```{r}
+lal <- function(theta, y, X, Z) {
+  nb <- ncol(Z) #initial value for b is previous bhat, or zero vector if first run of lal
+  b0 <- get0(".initb", envir=environment(lal), ifnotfound=rep(0, length=nb))
+  #solve inner optimisation problem
+  bhat <- optim(par=b0, fn=lfyb, gr=gr_lfyb, method="BFGS", control=list(fnscale=-1), 
+                theta=theta, y=y, X=X, Z=Z)
+  #bhat from this step is b0 (initial condition) for next step
+  assign(".initb", bhat$par, envir=environment(lal))
+  #calculate log determinant of Hessian 
+  logdetH <- sum(log(-diagH_lfyb(theta, y, bhat$par, X, Z)))
+  return(logdetH/2 - bhat$value - nb*log(2*pi)/2) #Laplace approximation
+}
+```
+Finally, we may use ``optim`` to solve for the MLE under this model. As an initial guess for $(\beta_0, \beta_1, \log(\sigma))^T$, we use the maximum likelihood estimate for the Weibull model with no random effects. The resulting MLE in the random effects setting is:
+```{r include=FALSE, echo=FALSE}
+rm(".initb", envir=environment(lal))
+```
+
+```{r}
+mle.lal <- optim(par=c(mle.nll$par, -1), fn=lal, method="BFGS", 
+                 control=list(trace=1, maxit=1000, ndeps=rep(1e-2, length=4)), hessian=TRUE, 
+                 y=rats, X=X, Z=Z) #MLE for (beta0, beta1, log(sigma), log(sigma_b))'
+mle.lal$par
+```
+The lower and upper bounds of a confidence interval around the treatment effect $\beta_1$ are given below, and are calculated using the asymptotic normality of the MLE:
+```{r}
+mle.b1 <- mle.lal$par[2]; sd.mle.b1 <- sqrt(solve(mle.lal$hessian)[2,2]) #standard error
+c(mle.b1 - 1.96*sd.mle.b1, mle.b1 + 1.96*sd.mle.b1) #95% CI
+```
+Under the assumptions made here, the above interval contains the "true" value of $\beta_1$ under this model with 95% probability. The interval does not contain zero (and in fact contains no non-negative numbers at all). Therefore, we conclude that the value of $\eta$, and of the shape parameter in the distribution of $T$, is lower for a rat that received the treatment compared to an otherwise identical rat that received the placebo. 
+
+## Problem 5
+We use a random walk Metropolis-Hastings algorithm to sample from the posterior distribution of $\theta=(\beta_0, \beta_1, \log(\sigma), \log(\sigma_b))^T$ using the model above.  We follow a Bayesian estimation procedure and specify the following prior distributions on the unknown parameters: $\beta_0$ $\beta_1$ and $\log(\sigma)$ are independent and following uniform (improper) priors while 
+$\sigma_b$ is also independent of $\beta_0$ $\beta_1$ and $\log(\sigma)$ and follows a prior exponential distribution with rate $5$.  This gives us the following log posterior function 
+```{r}
+log.post <- function(beta0, beta1, log_sigma,log_sigma_b,b_tumour, b_dead,  tumour, dead) { 
+  log_pi0_beta0=log(1);  log_pi0_beta1=  log(1);  log_pi0_log_sigma=log(1);  log_pi0_log_sigma_b= log(5*exp(-5*exp(log_sigma_b))) # log of the priors
+    log_pi0_b_tumour=log(dnorm(b_tumour, mean=0, sd=exp(log_sigma_b)));  log_pio_b_dead=log(dnorm(b_dead, mean=0, sd=exp(log_sigma_b))) # log of the priors
+  log_pi0<- log_pi0_beta0+log_pi0_beta1+log_pi0_log_sigma+log_pi0_log_sigma_b+sum(log_pio_b_dead)+sum(log_pi0_b_tumour)# we add the priors since we assume they are independent 
+  log.lik<-sum(log (dweibull(tumour$time, 1/exp(log_sigma), exp(beta0+beta1*tumour$rx+b_tumour))))+sum(log (pweibull(dead$time, 1/exp(log_sigma), exp(beta0+beta1*dead$rx+b_dead))))# Now the log likelihood
+  return(log.lik+log_pi0)# now the log posterior = log likelihood +log prior 
+}
+```
+We use a normal centered on the current values as the proposal for $\beta_0$, $\beta_1$, $\log(\sigma_b)$,  $\log(sigma)$ and each element of $b$ I will also use a  symmetric multivariate normal distribution centered on the current values for the values of $b$.  I will need to tune the proposal standard deviations to get appropriate acceptance rates, aiming for about 25%.
+
+The initial value is important since we would like to start in a region of the parameter space with high density as otherwise, that is, if the posterior density is extremely low for the initial value, it will take us a long time (a large number of generated values) to reach the area of high posterior density and therefore a long time to start sampling from the stationary distribution of the Markov chain. Thus we choose as our initial conditions the maximum likelihood estimators calculated earlier. 
+
+We choose a burn in period of 10,000 but this can always be changed later. 
+```{r}
+split_rats <- split(rats, rats$status)
+tumour=as.data.frame(split_rats[[2]]); dead=as.data.frame(split_rats[[1]])
+nsteps=100000 ; burn.in=10000
+MH<-function(beta0_0,beta1_0, log_sigma_0, log_sigma_b0, b_tumour0, b_dead0, sigma_beta0, sigma_beta1, sigma_log_sigma, sigma_log_sigma_b,   sigma_b, nsteps){ 
+  accept <- rep(0,3) # set up locations to store values at each step 
+  beta0 <- rep(0,nsteps) ;  beta1=rep(0,nsteps);  log_sigma=rep(0,nsteps);  log_sigma_b=rep(0,nsteps)
+  b_tumour=matrix(0,nsteps,length(tumour$rx)) ;  b_dead=matrix(0,nsteps,length(dead$rx)) # set up locations to store values at each step 
+  beta0[1] <- beta0_0 ;  beta1[1]=beta1_0;  log_sigma[1]=log_sigma_0;  log_sigma_b[1]=log_sigma_b0;  b_tumour[1,]=b_tumour0;  b_dead[1,]=b_dead0   #Set intial values
+lp0 <- log.post(beta0_0,beta1_0, log_sigma_0, log_sigma_b0,b_tumour0, b_dead0,tumour, dead) # calculate log posterior for these intial values
+for( i in 2:nsteps){ #MH loop
+current_beta0=beta0[i-1] ;current_beta1=beta1[i-1];current_log_sigma=log_sigma[i-1];  current_log_sigma_b=log_sigma_b[i-1];current_b_tumour=b_tumour[i-1,]; current_b_dead=b_dead[i-1,] # set current values
+proposed_log_sigma_b=current_log_sigma_b+rnorm(1,0,sigma_log_sigma_b)#update sigma_b 
+lp1 <- log.post(current_beta0,current_beta1, current_log_sigma, proposed_log_sigma_b,current_b_tumour, current_b_dead,tumour, dead) # find log posterior of new values 
+acc <- exp(min(0,lp1-lp0))
+if (runif(1)>=acc| !is.finite(acc)){#reject
+  b_tumour[i,] <- current_b_tumour ;  b_dead[i,]=current_b_dead;  beta0[i] <- current_beta0;  beta1[i]=current_beta1;  log_sigma[i]=current_log_sigma;  log_sigma_b[i]=current_log_sigma_b 
+  lp1<- lp0 ## Return to the 'old' log posterior 
+}else {#accept
+  accept[1]=accept[1]+1 # keep track of number of acceptances
+  log_sigma_b[i]=proposed_log_sigma_b #store found values 
+  lp0 <- lp1 ## uldate old log posterior to the new one 
+    proposed_b_tumour=current_b_tumour + rnorm( length(tumour$rx), mean=0, sd=sigma_b)#update b
+    proposed_b_dead=current_b_dead+ rnorm( length(dead$rx), mean=0, sd=sigma_b)#update b
+    lp1 <- log.post(current_beta0,current_beta1, current_log_sigma, proposed_log_sigma_b,proposed_b_tumour, proposed_b_dead,tumour, dead) # update log posterior
+  acc <- exp(min(0,lp1-lp0))
+  if (runif(1)>=acc | !is.finite(acc)){#reject
+  b_tumour[i,] <- current_b_tumour ;  b_dead[i,]=current_b_dead;  beta0[i] <- current_beta0;  beta1[i]=current_beta1;  log_sigma[i]=current_log_sigma     #store values 
+  lp1<- lp0 ## Return to previous log posterior
+}else {#accept
+          accept[2]=accept[2]+1 # keep track to calculate acceptance rates
+          b_tumour[i,] <- proposed_b_tumour;  b_dead[i,]=proposed_b_dead;  #store values   
+          lp0 <- lp1 ## update log posterior 
+  proposed_beta0=current_beta0+rnorm(1,0,sigma_beta0); proposed_beta1=current_beta1+rnorm(1,0,sigma_beta1)
+  proposed_log_sigma=current_log_sigma+rnorm(1,0,sigma_log_sigma)#update remaining paramaters
+  lp1=log.post(proposed_beta0,proposed_beta1, proposed_log_sigma, proposed_log_sigma_b,proposed_b_tumour, proposed_b_dead,tumour, dead) # calculate new log posterior
+  acc <- exp(min(0,lp1-lp0))
+  if (runif(1)>=acc| !is.finite(acc)){#reject
+  beta0[i] <- current_beta0 ;  beta1[i]=current_beta1;  log_sigma[i]=current_log_sigma #store values
+  lp1<- lp0 ## Return to previous log posterior
+}else {#accept
+    accept[3]=accept[3]+1 # keep track to calculate acceptance rates
+  beta0[i] <- proposed_beta0;  beta1[i]=proposed_beta1;  log_sigma[i]=proposed_log_sigma#store values 
+  lp0=lp1 # update log posterior 
+}}}}
+  list(beta0=beta0, beta1=beta1, log_sigma_b=log_sigma_b, log_sigma=log_sigma,ar_outer=accept[1]/nsteps, ar_middle=accept[2]/accept[1], ar_inner=accept[3]/accept[2])
+}
+mh=MH(5.0188886, -0.2376741, -1.3687252,-1.5976068, rep(0, length(tumour$rx)),rep(0, length(dead$rx)),0.1,0.1,0.1,0.2,0.001, nsteps = nsteps)
+```
+For tuning the proposal distribution we use run lengths of about 10000. 100000 would be
+better for the final run. The aim is for an acceptance rate of approximately 25%.
+```{r}
+c(mh$ar_outer,mh$ar_middle,mh$ar_inner)
+```
+We check for correlation between the parameters by plotting graphs.
+
+```{r echo=FALSE, fig.height=3}
+par(mfrow=c(2,3),mar=c(4,4,1,1))
+samp<-sample((1:nsteps)[-(burn.in)],nsteps/2) # For visualization purposes we take a random sample of the iterations retained (after discarding burn-in)
+plot(mh$beta0[samp],mh$beta1[samp],xlab=expression(beta_0),ylab=expression(beta_1),pch=".",cex=0.1)
+plot(mh$beta0[samp],mh$log_sigma[samp],xlab=expression(beta_0),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$beta0[samp],mh$log_sigma_b[samp],xlab=expression(beta_0),ylab=expression(log(sigma_b)),pch=".",cex=0.1)
+plot(mh$beta1[samp],mh$log_sigma[samp],xlab=expression(beta_1),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$beta1[samp],mh$log_sigma_b[samp],xlab=expression(beta_1),ylab=expression(log(sigma_b)),pch=".",cex=0.1)
+plot(mh$log_sigma[samp],mh$log_sigma_b[samp],xlab=expression(log(sigma)),ylab=expression(log(sigma_b)),pch=".",cex=0.1)
+```
+
+We note the elliptical shaped graphs especially for the plots of $\beta_0, \beta_1,\log(\sigma), \log(\sigma_b)$. This suggests that the posterior density for $\theta$ is highly non independent, and independent jumps for each component will give slow mixing. We consider using a shrunken version of the co-variance, found using the results above, as the basis for proposing multivariate normal jumps in   a random walk i.e. $\theta_i\sim N(\theta_{i-1}, \lambda*\Sigma)$, where $\lambda>0$ and we can tune. To find the co-variance matrix, $\Sigma$: 
+```{r}
+library(mvtnorm)
+mu=c(mean(mh$beta0[-(burn.in)]),mean(mh$beta1[-(burn.in)]), mean(mh$log_sigma[-(burn.in)]) )
+s11=cov(mh$beta0[-(burn.in)], mh$beta0[-(burn.in)]);s12=cov(mh$beta0[-(burn.in)], mh$beta1[-(burn.in)])
+s13=cov(mh$beta0[-(burn.in)], mh$log_sigma[-(burn.in)]);s22=cov(mh$beta1[-(burn.in)], mh$beta1[-(burn.in)])
+s23=cov(mh$beta1[-(burn.in)], mh$log_sigma[-(burn.in)]);s33=cov(mh$log_sigma, mh$log_sigma)
+covariance= matrix(c(s11,s12,s13,s12,s22,s23,s13,s23,s33), nrow=3, byrow=TRUE)
+```
+With this new proposal distribution for $(\beta_0, \beta_1, \log(\sigma)$ we get a new MH sampler identical to the previous one, except that when we propose new values in the inner most MH chain we use this excerpt of code:
+
+```{r, eval=FALSE}
+proposed= rmvnorm(1, mean=c(current_beta0, current_beta1, current_log_sigma), lambda*covariance) #update remaining paramaters
+proposed_beta0=proposed[1];  proposed_beta1=proposed[2];  proposed_log_sigma=proposed[3]
+```
+
+```{r echo=FALSE}
+nsteps=100000; burn.in=10000
+MH2<-function(beta0_0,beta1_0, log_sigma_0, log_sigma_b0, b_tumour0, b_dead0, lambda, sigma_log_sigma_b,   sigma_b, nsteps){ 
+  accept <- rep(0,3) # for acceptance values of outer, middle and inner chain
+  beta0 <- rep(0,nsteps) ;  beta1=rep(0,nsteps)# set up locations to store values at each step 
+  log_sigma=rep(0,nsteps);  log_sigma_b=rep(0,nsteps)# set up locations to store values at each step 
+  b_tumour=matrix(0,nsteps,length(tumour$rx)) ;  b_dead=matrix(0,nsteps,length(dead$rx)) # set up locations to store values at each step 
+  beta0[1] <- beta0_0 ;  beta1[1]=beta1_0;  log_sigma[1]=log_sigma_0;  log_sigma_b[1]=log_sigma_b0;  b_tumour[1,]=b_tumour0;  b_dead[1,]=b_dead0  #Set intial values
+lp0 <- log.post(beta0_0,beta1_0, log_sigma_0, log_sigma_b0,b_tumour0, b_dead0,tumour, dead) # log posterior for initial values 
+for( i in 2:nsteps){ #MH loop
+     current_beta0=beta0[i-1];    current_beta1=beta1[i-1]# set current values 
+    current_log_sigma=log_sigma[i-1];    current_log_sigma_b=log_sigma_b[i-1]# set current values 
+    current_b_tumour=b_tumour[i-1,];    current_b_dead=b_dead[i-1,]# set current values 
+proposed_log_sigma_b=current_log_sigma_b+rnorm(1,0,sigma_log_sigma_b)#update sigma_b 
+lp1 <- log.post(current_beta0,current_beta1, current_log_sigma, proposed_log_sigma_b,current_b_tumour, current_b_dead,tumour, dead)#new log posterior
+    acc <- exp(min(0,lp1-lp0))
+if (runif(1)>=acc| !is.finite(acc)){#reject
+  b_tumour[i,] <- current_b_tumour;  b_dead[i,]=current_b_dead;  beta0[i] <- current_beta0;  beta1[i]=current_beta1;  log_sigma[i]=current_log_sigma;  log_sigma_b[i]=current_log_sigma_b # store all values
+  lp1<- lp0##make sure correct log posteriors are stored 
+}else {#accept
+  accept[1]=accept[1]+1 # keep track to caluclate acceptance rates
+  log_sigma_b[i]=proposed_log_sigma_b #store found values 
+  lp0 <- lp1 ##make sure correct log posteriors are stored 
+    proposed_b_tumour=current_b_tumour + rnorm( length(tumour$rx), mean=0, sd=sigma_b)#update b
+    proposed_b_dead=current_b_dead+ rnorm( length(dead$rx), mean=0, sd=sigma_b)#update b
+    lp1 <- log.post(current_beta0,current_beta1, current_log_sigma, proposed_log_sigma_b,proposed_b_tumour, proposed_b_dead,tumour, dead) # new log posterior
+  acc <- exp(min(0,lp1-lp0))
+  if (runif(1)>=acc| !is.finite(acc)){#reject
+  b_tumour[i,] <- current_b_tumour; b_dead[i,]=current_b_dead;  beta0[i] <- current_beta0;  beta1[i]=current_beta1; log_sigma[i]=current_log_sigma #store values 
+  lp1<- lp0 ##make sure correct log posteriors are stored 
+}else {#accept
+  accept[2]=accept[2]+1# keep track to caluclate acceptance rates
+  b_tumour[i,] <- proposed_b_tumour; b_dead[i,]=proposed_b_dead;log_sigma_b[i]=proposed_log_sigma_b  #store found values 
+  lp0 <- lp1 ##make sure correct log posteriors are stored 
+  proposed= rmvnorm(1, mean=c(current_beta0, current_beta1, current_log_sigma), lambda*covariance) #update remaining paramaters
+  proposed_beta0=proposed[1];  proposed_beta1=proposed[2];  proposed_log_sigma=proposed[3]
+  lp1=log.post(proposed_beta0,proposed_beta1, proposed_log_sigma, proposed_log_sigma_b,proposed_b_tumour, proposed_b_dead,tumour, dead)# new log posterior
+  acc <- exp(min(0,lp1-lp0))
+  if (runif(1)>=acc| !is.finite(acc)){#reject
+  beta0[i] <- current_beta0;  beta1[i]=current_beta1;  log_sigma[i]=current_log_sigma #store values 
+  lp1<- lp0 ##make sure correct log posteriors are stored 
+}else {#accept
+    accept[3]=accept[3]+1# keep track to caluclate acceptance rates
+  beta0[i] <- proposed_beta0;  beta1[i]=proposed_beta1;  log_sigma[i]=proposed_log_sigma#store found values 
+  lp0=lp1##make sure correct log posteriors are stored 
+}}}}
+  list(beta0=beta0, beta1=beta1, log_sigma_b=log_sigma_b, log_sigma=log_sigma,ar_outer=accept[1]/nsteps, ar_middle=accept[2]/accept[1], ar_inner=accept[3]/accept[2])
+}
+```
+Using the new MH algorithm and tuning we get
+```{r}
+mh=MH2(5.0188886, -0.2376741, -1.3687252,-1.5976068, b_tumour0 =  rep(0, length(tumour$rx)),b_dead0= rep(0, length(dead$rx)),lambda=2.5,sigma_log_sigma_b = 0.2, sigma_b =0.001, nsteps = nsteps)
+mh$ar_outer;mh$ar_middle;mh$ar_inner
+```
+
+We now check that the Markov chain is behaving as we expect. Firstly, the trace plots show some good mixing within the parameters
+
+```{r echo=FALSE, fig.height=3}
+show.plot<- (burn.in):nsteps
+par(mfrow=c(2,2),mar=c(3,4,1,1))
+plot(mh$beta0[show.plot],type="l",ylab=expression(beta0))
+plot(mh$beta1[show.plot],type="l",ylab=expression(beta1))
+plot(mh$log_sigma[show.plot],type="l",ylab=expression(log(sigma)))
+plot(mh$log_sigma_b[show.plot],type="l",ylab=expression(log(sigma_b)))
+```
+
+The auto-correlation function plots are also decreasing suggesting that the Markov chain is converging. 
+
+```{r echo=FALSE, fig.height=3}
+par(mfrow=c(2,2),mar=c(4,4,1,1))
+acf(mh$beta0[-burn.in],xlab=expression(beta0))
+acf(mh$beta1[-burn.in],xlab=expression(beta1))
+acf(mh$log_sigma[-burn.in],xlab=expression(log(sigma)))
+acf(mh$log_sigma_b[-burn.in],xlab=expression(log(sigma_b)))
+```
+
+We can also get some idea of the effective sample size for each of our parameters
+```{r}
+n.eff <- c(0,0,0,0)
+autocor <- acf(mh$beta0[-(burn.in)],plot=FALSE); t.eff <- 2*sum(autocor[[1]]) - 1; n.eff[1] <- nsteps/t.eff
+autocor <- acf(mh$beta1[-(burn.in)],plot=FALSE); t.eff <- 2*sum(autocor[[1]]) - 1; n.eff[2] <- nsteps/t.eff
+autocor <- acf(mh$log_sigma[-(burn.in)],plot=FALSE); t.eff <- 2*sum(autocor[[1]]) - 1;n.eff[3] <- nsteps/t.eff
+autocor <- acf(mh$log_sigma_b[-(burn.in)],plot=FALSE);t.eff <- 2*sum(autocor[[1]]) - 1 ;n.eff[4] <- nsteps/t.eff
+n.eff
+```
+We will also obtain an independent sub-sample of our chain and then split it into two sub-samples. Using the Kolmogorov-Smirnov test we chance to see that they come from the same distribution and hence that the Markov chain has converged. 
+```{r message=FALSE, warning=FALSE}
+k1=ks.test(mh$beta0[-1000:-500], mh$beta0[-500]); 
+k2=ks.test(mh$beta1[-1000:-500], mh$beta1[-500]);
+k3=ks.test(mh$log_sigma_b[-1000:-500], mh$log_sigma_b[-500]);
+k4=ks.test(mh$log_sigma[-1000:-500], mh$log_sigma[-500]);
+c(k1$p.value,k2$p.value,k3$p.value,k4$p.value)
+```
+We see that in all cases the p-values are large, and thus there is not significant evidence that the two sub-samples are from different distributions. Hence we conclude that the Markov chain has converged. 
+
+Again, we investigate the correlation between the parameters by plotting a random sample of the iterations retained after discarding the burn in period . 
+
+```{r echo=FALSE, fig.height=3}
+par(mfrow=c(2,3),mar=c(4,4,1,1))
+samp<-sample((1:nsteps)[-(burn.in)],nsteps/2)# For visualization purposes we take a random sample of the iterations retained (after discarding burn-in)
+plot(mh$beta0[samp],mh$beta1[samp],xlab=expression(beta_0),ylab=expression(beta_1),pch=".",cex=0.1)
+plot(mh$beta0[samp],mh$log_sigma[samp],xlab=expression(beta_0),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$beta0[samp],mh$log_sigma_b[samp],xlab=expression(beta_0),ylab=expression(log(sigma_b)),pch=".",cex=0.1)
+plot(mh$beta1[samp],mh$log_sigma[samp],xlab=expression(beta_1),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$beta1[samp],mh$log_sigma_b[samp],xlab=expression(beta_1),ylab=expression(log(sigma_b)),pch=".",cex=0.1)
+plot(mh$log_sigma[samp],mh$log_sigma_b[samp],xlab=expression(log(sigma)),ylab=expression(log(sigma_b)),pch=".",cex=0.1)
+```
+It looks like we need a more sophisticated proposal to deal with the correlation of $\log(\sigma_b)$ and the other 3 parameters. 
+
+We also investigate the shape of the marginal posterior densities of the parameters by plotting histograms of the retained values 
+
+```{r echo=FALSE, fig.height=3}
+par(mfrow=c(2,2),mar=c(4,4,1,1))
+hist(mh$beta0[-burn.in], freq = FALSE, breaks = 100)
+hist(mh$beta1[-burn.in], freq = FALSE, breaks = 100)
+hist(mh$log_sigma[-burn.in], freq = FALSE, breaks = 100)
+hist(mh$log_sigma_b[-burn.in], freq = FALSE, breaks = 100)
+```
+The long non symmetric tails on some of the marginal posterior densities suggesting such as on the $\log(\sigma_b)$ graph again suggest a more sophisticated proposal would be useful. 
+We compute a 95% posterior probability interval for the intervention effect $\beta_1$. 
+```{r}
+quantile(mh$beta1[-(burn.in)], c(.025, 0.975))#95% condfidence interval for beta_1
+```
+We conclude that 0 is not contained in the 95% posterior probability interval for the intervention effect, suggesting that the intervention has a statistically significant effect.AS per the analysis in part 2,the confidence values for $\beta_1$ being greater than zero suggest that the treatment is having a poitive effect. This is in contrast to previous results and thus perhaps suggests that more investigation is required.  
+
+# Fatigue of materials
+The fatigue characteristics of materials are established through testson small flat plates called coupons. The levels of stress (force per unit area) as well as the number of cycles to failure are recorded for each test.  The number of cycles to failure $N_i$ exhibits a random behaviour due to inherent microstructural inhomogeneity in the material properties and also due to uncontrolled differences  in test conditions. When a test is stopped before the coupon fails,  then the coupon is marked as a  \emph{runout}.  Let   $N_i$ denote the number cycles until failure in coupon $i$ and $s_i$ be the corresponding stress level (in Mega Pascals) applied.  
+We model $N_i$ as continuous using $N_i=\alpha\,(s_i-\gamma)^\delta\,\epsilon_i\,,\qquad \mbox{where}\quad s_i>\gamma$ and  $\epsilon_i$ is a random error such that $\epsilon_i\sim \mbox{Weibull}(\mbox{shape}=1/\sigma,\mbox{scale}=1)$ .
+The constants $\alpha>0$, $\delta\in R$, $\gamma>0$  and $\sigma>0$ are unknown parameters. Empirical results suggest that coupons tested below the stress level $\gamma$ will never fail. The unknown parameter $\gamma$ is therefore called the \textbf{fatigue limit.} Consider the following data obtained in a series of 26 tests to study the fatigue of a nickel base supperalloy:
+```{r}
+fatigue <- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")#load data
+s <- fatigue$s; N <- fatigue$N; ro <- fatigue$ro; ro <- as.logical(ro)
+```
+##Problem 1
+We use \texttt{optim} to find the maximum likelihood estimate of $\bm{\theta}=(\log(\alpha),\delta,\log(\sigma))^\top$ for an arbitary value of $\gamma$. We compute  asymptotic $95\%$ confidence intervals for each of the unknown parameters and investigate the sensitivity of the results to the chosen value of $\gamma$. 
+```{r}
+#negative log likelihood
+nll_weibull2 <- function(theta,gam,s,N,ro){
+  alpha <- exp(theta[1]); delta <- theta[2]; sigma <- exp(theta[3])
+  -sum(dweibull(N[!ro], shape = 1/sigma, scale = alpha*(s[!ro]-gam)^delta, log = TRUE)) - sum(pweibull(N[ro], shape = 1/sigma, scale = alpha*(s[ro]-gam)^delta, lower.tail = FALSE, log.p = TRUE))}
+#MLE with optim - Set initial point and choose a gamma. min(s)=80.3, so we can try gam=80.
+theta0 <- c(1,1,1); gam <- 80
+fit_weibull2 <- optim(par=theta0, fn=nll_weibull2, method="BFGS", hessian=TRUE, gam=gam, s=s, N=N, ro=ro)
+fit_weibull2$convergence #check convergence
+mle_params <- fit_weibull2$par; mle_params #the optimal values
+-fit_weibull2$value #loglikelihood value at the mle
+#standard errors and conf interval: similarly as in the "rats" problem
+se_weibull2 <- diag(solve(fit_weibull2$hessian))^.5 #standard deviations
+c(fit_weibull2$par[1] - 1.96*se_weibull2[1], fit_weibull2$par[1] + 1.96*se_weibull2[1]) #confidence limit for logalpha
+c(fit_weibull2$par[2 ]- 1.96*se_weibull2[2], fit_weibull2$par[2] + 1.96*se_weibull2[2]) #confidence limit for delta
+c(fit_weibull2$par[3] - 1.96*se_weibull2[3], fit_weibull2$par[3] + 1.96*se_weibull2[3]) #confidence limit for logsigma
+```
+The function \texttt{gamma\_sensitivity},code is not displayed, calls \texttt{optim} for a given initial point $\theta_0$ and for several values of $\gamma$. Then plots the optimal values of the different parameters as a function of $\gamma$, and returns a data frame containing as columns all $\gamma$ values, the optimal log-likelihood values, the ML estimates, and the mean of the scale parameter in case of each $\gamma$. So the mean scale parameter is given by  \texttt{mean(alpha\*(s - gam\_list[ind])\^{\ }delta)} (the mean is taken over the $s$ values).
+```{r echo=FALSE, fig.height=2 }
+gamma_sensitivity <- function(theta0, gam_list){#gam_list: gamma values to try, theta0: initial point for optim
+  gam_sensitivity_data <- matrix(ncol=6, nrow=length(gam_list))#results will be monitored here:
+  for(ind in c(1:length(gam_list))){#fill up the matrix with mle values
+    gam_sensitivity_data[ind, 1] <- gam_list[ind]
+    fit_weibull2 <- optim(par=theta0,fn=nll_weibull2, method="BFGS",
+                          hessian=TRUE,gam=gam_list[ind],s=s,N=N,ro=ro)
+    ll_value <- -fit_weibull2$value; gam_sensitivity_data[ind, 2] <- ll_value
+    mle <- fit_weibull2$par; gam_sensitivity_data[ind, 3:5] <- mle
+    alpha <- exp(mle[1]); delta <- mle[2];sigma <- exp(mle[3])
+    #mean of the scale parameters
+    scale_param <- mean(alpha*(s - gam_list[ind])^delta) 
+    gam_sensitivity_data[ind, 6] <- scale_param}
+  gam_sensitivity_data <- data.frame(gam_sensitivity_data) #create data frame
+  colnames(gam_sensitivity_data, do.NULL = FALSE, prefix = "col")
+  colnames(gam_sensitivity_data) <- c("gamma", "log_like","logalpha", "delta", "logsigma", "scale_param")
+  par(mfrow=c(2,3))#sensitivity plots
+   plot(x <- gam_sensitivity_data$gamma, y <- gam_sensitivity_data$log_like, type = 'line', xlab = "gamma", ylab = "log-like")
+  plot(x <- gam_sensitivity_data$gamma, y <- gam_sensitivity_data$logalpha, type = 'line', xlab = "gamma", ylab = "logalpha"); plot(x <- gam_sensitivity_data$gamma, y <- gam_sensitivity_data$delta, type = 'line', xlab = "gamma", ylab = "delta"); plot(x <- gam_sensitivity_data$gamma, y <- gam_sensitivity_data$logsigma, type = 'line', xlab = "gamma", ylab = "logsigma"); plot(x <- gam_sensitivity_data$gamma, y <- gam_sensitivity_data$scale_param, type = 'line', xlab = "gamma", ylab = "mean scale param")
+  return(gam_sensitivity_data)
+}
+```
+
+```{r}
+theta0 = c(1,1,1); gam_list <- seq(1,80,0.1)
+sens_data <- gamma_sensitivity(theta0, gam_list)
+#the log-likelihood has maximum at:
+sens_data$gamma[which(sens_data$log_like %in% max(sens_data$log_like))]
+#optimal values of the other parameters at the same gamma:
+sens_data$logalpha[which(sens_data$log_like %in% max(sens_data$log_like))]
+sens_data$delta[which(sens_data$log_like %in% max(sens_data$log_like))]
+sens_data$logsigma[which(sens_data$log_like %in%  max(sens_data$log_like))]
+#logsigma has minimum at:
+sens_data$gamma[which(sens_data$logsigma %in% min(sens_data$logsigma))]
+```
+
+The log-likelihood has maximum at $\gamma=66.5$ and the negative log-likelihood has almost the very same shape as $\log(\sigma)$. This is in accordance with the fact that the scale parameter is very smooth except when $\gamma$ is close to 80, so the shape parameter determines the behavior of the likelihood function.
+About the shape parameter: $\log(\sigma)$ has a minimum (and the shape parameter a maximum) at $\gamma$=65.2. As long as the (mean of the) scale parameter changes moderately, the decrease can be explained as following:
+When $\gamma$ is small the minimum stress level is much higher than the fatigue limit. Therefore early failures are more likely even in case of stress levels from the lower region of the data. This would mean a greater positive skewness in the Weibull distribution, i.e. a smaller shape parameter (bigger $\log(\sigma)$). However, if $\gamma$ is large, then the fatigue limit is close to the minimum stress level. Thus it is more likely that it takes some time the failure to occure for stress levels close to the limit. This gives smaller positive skewness, and bigger shape parameter (smaller $\log(\sigma)$). As soon as the mean scale parameter starts to increase very fast (around $\gamma$>66) this explanation fails, and positive skewness occurs again. About the scale parameter: $\log(\alpha)$ is in the range (13,40) and decreases linearly as a function of the chosen $\gamma$ (meaning that the $\alpha$ values are large and decrease exponentially with $\gamma$). $\delta$ is in the range (-6,-1) and increases linearly as a function of the chosen $\gamma$. The opposite effects of $\gamma$ on $\alpha$ and $\delta$ keep the scale parameter in the same order of magnitude for different $\gamma$ values (linearity fails when $\gamma$ is close to 80). However, as $\gamma$ increases, the scale parameter increases (slowly) as well. This should be intuitive, because we expect more time to elapse until failure, if the minimum stress level is closer to the fatigue limit (and the scale parameter is proportional to the expectation of the Weibull distribution).
+
+##Problem 2
+We estimate the vector of unknown parameters. Now $\gamma$ is included in the parameter vector $\theta$, and has the constraint $0<\gamma<\min(s[!ro])=\min(s)$ in this case. So let $\theta_4 = \textrm{logit}\left(\frac{\gamma}{min(s)}\right)$, i.e. we map $\gamma / \min(s)$ from (0,1) to $\mathbb{R}$, to make the optimisation work.
+```{r}
+#new negative log-likelihood with new theta
+nll_weibull2_gam <- function(theta,s,N,ro){
+  alpha <- exp(theta[1]);delta <- theta[2];sigma <- exp(theta[3])
+  gam <- min(s)*1/(exp(-theta[4])+1) #inverse logit
+  #other possibilities give similar results, e.g.:
+  #gam <- min(s)*exp(-exp(theta[4]));gam <- min(s)*pnorm(theta[4])
+  -sum(dweibull(N[!ro], shape = 1/sigma, scale = alpha*(s[!ro]-gam)^delta, log = TRUE)) - sum(pweibull(N[ro], shape = 1/sigma, scale = alpha*(s[ro]-gam)^delta, lower.tail = FALSE, log.p = TRUE))
+}
+theta0 <- c(18.24,-2.16,-0.9,log(66.5/min(s))-log(1-66.5/min(s))) #use the values we got from gamma_sensitivity. theta[4] = logit(gam/min(s))
+fit_weibull2_gam <- optim(par=theta0, fn=nll_weibull2_gam, method="BFGS", hessian=TRUE, s=s, N=N, ro=ro) #mle with optim
+fit_weibull2_gam$convergence #check convergence
+mle_gam <- fit_weibull2_gam$par; mle_gam #opt parameters
+-fit_weibull2_gam$value #loglikelihood value at the mle
+min(s)*1/(exp(-mle_gam[4])+1) #opt gamma
+```
+The 95% confidence intervals for $\log(\alpha)$, $\delta$, $\log(\sigma)$ and logit($\gamma / \min(s)$) are the followings:
+```{r, echo=FALSE}
+se_weibull2_gam <- diag(solve(fit_weibull2_gam$hessian))^.5 #standard errors
+c(fit_weibull2_gam$par[1]-1.96*se_weibull2_gam[1],fit_weibull2_gam$par[1]+1.96*se_weibull2_gam[1]) #confidence limit for logalpha
+c(fit_weibull2_gam$par[2]-1.96*se_weibull2_gam[2],fit_weibull2_gam$par[2]+1.96*se_weibull2_gam[2]) #confidence limit for delta
+c(fit_weibull2_gam$par[3]-1.96*se_weibull2_gam[3],fit_weibull2_gam$par[3]+1.96*se_weibull2_gam[3]) #confidence limit for logsigma
+c(fit_weibull2_gam$par[4]-1.96*se_weibull2_gam[4],fit_weibull2_gam$par[4]+1.96*se_weibull2_gam[4]) #confidence limit for gamma_transformed
+```
+
+##Problem 3
+We investigate the lower 10\%  quantile of $N$ which in this case is given by 
+$N_{0.1}=\alpha\,(s_i-\gamma)^\delta\,z^\sigma_{0.1}$.  We estimate and plot the lower 10\%  quantile curve of $N$ and plot it together with the data and the median of an exponential distribution with unit rate.
+```{r}
+#mle results:
+alpha <- exp(mle_gam[1]); delta <- mle_gam[2]
+sigma <- exp(mle_gam[3]);gam <- min(s)*1/(exp(-mle_gam[4])+1)
+#plot 10% and 50 % quantiles as a function of s 
+weibull2_quantiles10 <- alpha*(s-gam)^delta*
+  qexp(0.1, rate = 1, lower.tail = TRUE, log.p = FALSE)^sigma
+weibull2_quantiles50 <- alpha*(s-gam)^delta*
+  qexp(0.5, rate = 1, lower.tail = TRUE, log.p = FALSE)^sigma
+```
+
+```{r,echo=FALSE, fig.height=3}
+par(mfrow=c(1,1))
+plot(x <- s, y <- weibull2_quantiles10, type="l", xlab = "stress level",
+     ylab="Weibull quantiles", ylim = c(0,220000), col = 'blue')
+points(x <- s, y <- N)
+lines(x <- s, y <- weibull2_quantiles50, col = 'red')
+legend(110, 200000, legend=c("10% quantile", "median"),
+       col=c("blue","red"), lty=1:2, cex=0.8)
+```
+
+## Problem 4
+```{r include=FALSE}
+fatigue<- read.table("http://people.bath.ac.uk/kai21/ASI/fatigue.txt")
+```
+ Consider now the following random effects model that allows the fatigue limit to be different for each coupon. This is achieved by modelling the fatigue limit as an unobserved random variable $\Gamma$. For coupon $i$,  the conditional distribution of the number of cycles to failure $N_i$ given that  $\Gamma_i=\gamma_i<s_i$ that is, given that the realization of the fatigue limit for that coupon is below the applied stress level is given by
+ \begin{equation}
+ N_i|\Gamma_i=\gamma_i<s_i\sim \mbox{Weibull}(\mbox{shape}=1/\sigma,\mbox{scale}=\alpha\,(s_i-\gamma_i)^\delta)
+ \end{equation}
+We will assume that $\Gamma_1,\ldots,\Gamma_{26}$ are i.i.d: 
+ \begin{equation}
+\mbox{Weibull}(\mbox{shape}=1/\sigma_{\gamma},\mbox{scale}=\exp(\mu_\gamma))
+\end{equation}
+where $\mu_{\gamma}\in R,\sigma_{\gamma}>0$ are unknown parameters.
+Let ${b}=(\gamma_1,\ldots,\gamma_{26})^\top$ and the vector of unknown parameters is now given by ${\theta}^\top=(\log(\alpha),\delta,\log(\sigma),\mu_\gamma,\log(\sigma_{\gamma})).$ We will assume the following priors: $\log(\alpha),\delta,\log(\sigma),\mu_{\gamma}$ are independent and with improper uniform priors while $\sigma_{\gamma}$ is exponential with rate 5 and independent of $\log(\alpha),\delta,\log(\sigma)$ and $\mu_{\gamma}$. 
+
+We wish to use  a  Metropolis-Hastings algorithm to sample from the posterior distribution of ${\theta}$ and the random effects ${b}$.
+
+The below computes a log posterior function for the model given parameters: $\log(\alpha), \delta, \log(\sigma), \mu_\gamma, \log(\sigma_\gamma)$ and $\gamma$ 
+```{r}
+log.post <- function(log_alpha, delta, log_sigma,mu_gamma,log_sigma_gamma,gamma_broke, gamma_runoff, broke, runoff) { 
+  log_pi0_log_alpha=log(1);log_pi0_delta=  log(1);log_pi0_log_sigma=log(1);log_pi0_mu_gamma= log(1) #log prior
+  log_pi0_log_sigma_gamma=log(5*exp(-5*exp(log_sigma_gamma)))
+  log_pi0_gamma_broke=log(dweibull(gamma_broke, 1/exp(log_sigma_gamma), exp(mu_gamma)))#log prior
+  log_pi0_gamma_runoff=log(dweibull(gamma_runoff, 1/exp(log_sigma_gamma), exp(mu_gamma)))#log prior
+  log_pi0<- log_pi0_log_alpha+log_pi0_delta+log_pi0_log_sigma+log_pi0_mu_gamma+log_pi0_log_sigma_gamma +sum(log_pi0_gamma_runoff)+sum(log_pi0_gamma_broke)# we add the priors since we assume they are independent 
+  log.lik=sum(log(pweibull(broke$N, 1/exp(log_sigma), exp(log_alpha)*(broke$s-gamma_broke)^delta)))+sum(log(dweibull(runoff$N, 1/exp(log_sigma), exp(log_alpha)*(runoff$s-gamma_runoff)^delta)))# Now the log likelihood
+  return(log.lik+log_pi0) # now the log posterior = log likelihood +log prior
+}
+```
+We now move onto the MH algorithm. for the proposal distributions we consider a normal random variable centered on the previous value with variance that we can tune for the variables $\log(\alpha), \delta, \log(\sigma), \mu_\gamma$ and $\log(\sigma_\gamma)$ and a uniform random variable centered on the previous value with range that we can vary for $\gamma$. We choose a burn in period of 10000 although this can be altered and tune the parameters to try and get acceptance rates of around 25% although as noted earlier, the system is quite sensitive to values of $\gamma$ making the tuning very difficult to do.  
+
+```{r}
+split_fatigue <- split(fatigue, fatigue$ro)
+broke=as.data.frame(split_fatigue[[1]]); runoff=as.data.frame(split_fatigue[[2]])
+nsteps=100000; burn.in=10000
+MH<-function(log_alpha0, delta0, log_sigma0,mu_gamma0,log_sigma_gamma0, gamma_broke0, gamma_runoff0, range_log_alpha, range_delta, range_log_sigma,range_mu_gamma,range_log_sigma_gamma, range_gamma, nsteps=nsteps){ 
+  accept <- rep(0,3)# will keep track of acceptance rates for the inner middle and outer metropolis hastings chain 
+  log_alpha <- rep(0,nsteps); delta=rep(0,nsteps);log_sigma=rep(0,nsteps); mu_gamma=rep(0,nsteps);  log_sigma_gamma=rep(0,nsteps)#Set up holders for values 
+  gamma_broke=matrix(0, nsteps, length(broke$N)); gamma_runoff=matrix(0, nsteps, length(runoff$N))#Set up holders for values 
+  log_alpha[1] <- log_alpha0;  delta[1]=delta0;  log_sigma[1]=log_sigma0;  mu_gamma[1]=mu_gamma0;  log_sigma_gamma[1]=log_sigma_gamma0 #Set initial values
+  gamma_broke[1,]=gamma_broke0;  gamma_runoff[1,]=gamma_runoff0#Set initial values
+  lp0 <- log.post(log_alpha0, delta0, log_sigma0,mu_gamma0,log_sigma_gamma0, gamma_broke0, gamma_runoff0, broke, runoff) # log posterior calculated from the initial values 
+  for (i in 2:nsteps){
+    #Set current values
+    current_log_alpha=log_alpha[i-1]; current_delta=delta[i-1]; current_log_sigma=log_sigma[i-1]; current_mu_gamma=mu_gamma[i-1]; current_log_sigma_gamma=log_sigma_gamma[i-1] # extract current values  
+    current_gamma_broke=gamma_broke[i-1,];current_gamma_runoff=gamma_runoff[i-1,] #extract current values 
+    proposed_mu_gamma=current_mu_gamma+rnorm(1,0, range_mu_gamma) # new proposed values 
+    proposed_log_sigma_gamma=current_log_sigma_gamma+rnorm(1,0, range_log_sigma_gamma) # new proposed values 
+    lp1 <- log.post(current_log_alpha, current_delta, current_log_sigma,proposed_mu_gamma,proposed_log_sigma_gamma, current_gamma_broke, current_gamma_runoff, broke, runoff) # calculate new log posterior
+        acc <- exp(min(0,lp1-lp0))
+    if (runif(1) >= acc | !is.finite(acc)){# reject
+      log_alpha[i] <- current_log_alpha; delta[i]=current_delta; log_sigma[i]=current_log_sigma;    mu_gamma[i]=current_mu_gamma; log_sigma_gamma[i]=current_log_sigma_gamma;      gamma_broke[i,]=current_gamma_broke; gamma_runoff[i,]=current_gamma_runoff # keep track of variables 
+      lp1=lp0 # keep log posterior values up to date 
+    }else{#accept
+      accept[1]=accept[1]+1 # keep track to calculate acceptance rates
+      mu_gamma[i]=proposed_mu_gamma ; log_sigma_gamma[i]=proposed_log_sigma_gamma # update new values 
+      lp0=lp1# keep log posterior values up to date 
+      proposed_gamma_broke= current_gamma_broke + runif(length(broke$N), -range_gamma, range_gamma)# propose new gamma
+      proposed_gamma_runoff= current_gamma_runoff+ runif(length(runoff$N), -range_gamma, range_gamma) # propose new gamma
+      check1=isTRUE(all.equal(abs(broke$s-proposed_gamma_broke), broke$s-proposed_gamma_broke)) #check gamma is less than the s values if not reject
+      check2=isTRUE(all.equal(abs(runoff$s-proposed_gamma_runoff), runoff$s-proposed_gamma_runoff))#check gamma is less than the s values if not reject
+      if(!(check1 & check2) ){ # reject 
+      log_alpha[i] <- current_log_alpha;delta[i]=current_delta;log_sigma[i]=current_log_sigma; gamma_broke[i,]=current_gamma_broke; gamma_runoff[i,]=current_gamma_runoff
+      lp1=lp0# keep log posterior values up to date 
+      } else{# continue with MH
+      lp1 <- log.post(current_log_alpha, current_delta, current_log_sigma,proposed_mu_gamma,proposed_log_sigma_gamma, proposed_gamma_broke, proposed_gamma_runoff, broke, runoff)} # calculate new log posterior
+      acc <- exp(min(0,lp1-lp0))
+      if (runif(1) >= acc| !is.finite(acc)){# reject
+      log_alpha[i] <- current_log_alpha;delta[i]=current_delta; log_sigma[i]=current_log_sigma; gamma_broke[i,]=current_gamma_broke;gamma_runoff[i,]=current_gamma_runoff # keep track of variables 
+      lp1=lp0# keep log posterior values up to date 
+      }else{ #accept
+        accept[2]=accept[2]+1 # keep track to calculate acceptance rates
+        gamma_broke[i,]=proposed_gamma_broke; gamma_runoff[i,]=proposed_gamma_runoff # update new values 
+      lp0=lp1# keep log posterior values up to date 
+      proposed_log_alpha=current_log_alpha+rnorm(1, 0, range_log_alpha) #new propsed values
+      proposed_delta=current_delta+rnorm(1, 0, range_delta) #new propsed values
+      proposed_log_sigma=current_log_sigma+rnorm(1, 0, range_log_sigma) #new propsed values
+      lp1 <- log.post(proposed_log_alpha, proposed_delta, proposed_log_sigma,proposed_mu_gamma,proposed_log_sigma_gamma, proposed_gamma_broke, proposed_gamma_runoff, broke, runoff) # calculate new log posterior
+      acc <- exp(min(0,lp1-lp0))
+      if (runif(1) >= acc| !is.finite(acc)){# reject
+      log_alpha[i] <- current_log_alpha; delta[i]=current_delta;log_sigma[i]=current_log_sigma # keep track of variables 
+      lp1=lp0# keep log posterior values up to date 
+      }else{#accept
+        accept[3]=accept[3]+1 # keep track to calculate acceptance rates
+        log_alpha[i] <- proposed_log_alpha
+      delta[i]=proposed_delta ; log_sigma[i]=proposed_log_sigma # keep track of variables 
+      lp0=lp1# keep log posterior values up to date 
+      } } }  }
+list(log_alpha=log_alpha, delta=delta, log_sigma=log_sigma,mu_gamma=mu_gamma,log_sigma_gamma=log_sigma_gamma, ar_inner=accept[3]/accept[2], ar_middle=accept[2]/accept[1], ar_outer=accept[1]/nsteps)
+} 
+  mh=MH(0,1,1,4,-3,rep(50, length(broke$N)),rep(50, length(runoff$N)),0.1,0.3,0.3,0.05,0.05,0.4,nsteps = nsteps)
+  mh$ar_outer;  mh$ar_middle;  mh$ar_inner
+``` 
+We plot the trace graphs of our retained results minus the burn-in period: 
+
+```{r echo=FALSE, fig.height=3}
+show.plot<- (burn.in):nsteps
+par(mfrow=c(3,2), mar=c(4,4,1,1))
+plot(mh$log_alpha[show.plot],type="l",ylab=expression(log_alpha))
+plot(mh$delta[show.plot],type="l",ylab=expression(delta))
+plot(mh$log_sigma[show.plot],type="l",ylab=expression(log(sigma)))
+plot(mh$mu_gamma[show.plot],type="l",ylab=expression(mu_gamma))
+plot(mh$log_sigma_gamma[show.plot],type="l",ylab=expression(log(sigma_gamma)))
+```
+and the auto-correlation functions:
+
+```{r echo=FALSE, fig.height=3}
+
+par(mfrow=c(3,2),mar=c(4,4,1,1))
+acf(mh$log_alpha[-burn.in],xlab=expression(log(alpha)))
+acf(mh$delta[-burn.in],xlab=expression(delta))
+acf(mh$log_sigma[-burn.in],xlab=expression(log(sigma)))
+acf(mh$mu_gamma[-burn.in],xlab=expression(mu_gamma))
+acf(mh$log_sigma_gamma[-burn.in],xlab=expression(log(sigma_gamma)))
+```
+We see that we get quite small values for effective sample size and that the sample size for $\log(\sigma_\gamma)$ is extremely small. 
+```{r}
+n.eff <- c(0,0,0,0,0)
+autocor <- acf(mh$log_alpha[-(burn.in)],plot=FALSE);t.eff <- 2*sum(autocor[[1]]) - 1;n.eff[1] <- nsteps/t.eff
+autocor <- acf(mh$delta[-(burn.in)],plot=FALSE);t.eff <- 2*sum(autocor[[1]]) - 1;n.eff[2] <- nsteps/t.eff
+autocor <- acf(mh$log_sigma[-(burn.in)],plot=FALSE);t.eff <- 2*sum(autocor[[1]]) - 1;n.eff[3] <- nsteps/t.eff
+autocor <- acf(mh$mu_gamma[-(burn.in)],plot=FALSE);t.eff <- 2*sum(autocor[[1]]) - 1;n.eff[4] <- nsteps/t.eff
+autocor <- acf(mh$log_sigma_gamma[-(burn.in)],plot=FALSE);t.eff <- 2*sum(autocor[[1]]) - 1;n.eff[4] <- nsteps/t.eff
+n.eff
+```
+
+
+We check for correlation between the parameters by plotting graphs of a random sample of the iterations retained after discarding the burn-in: 
+
+```{r echo=FALSE, fig.height=4, fig.width=4}
+par(mfrow=c(3,2),mar=c(4,4,1,1))
+samp<-sample((1:nsteps)[-(burn.in)],nsteps/2)# For visualization purposes we take a random sample of the iterations retained (after discarding burn-in)
+plot(mh$log_alpha[samp],mh$delta[samp],xlab=expression(log(alpha)),ylab=expression(delta),pch=".",cex=0.1)
+plot(mh$log_alpha[samp],mh$log_sigma[samp],xlab=expression(log(alpha)),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$log_alpha[samp],mh$log_sigma_gamma[samp],xlab=expression(log(alpha)),ylab=expression(log(sigma_gamma)),pch=".",cex=0.1)
+plot(mh$delta[samp],mh$log_sigma[samp],xlab=expression(delta),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$delta[samp],mh$log_sigma_gamma[samp],xlab=expression(delta),ylab=expression(log(sigma_gamma)),pch=".",cex=0.1)
+plot(mh$log_sigma[samp],mh$log_sigma_gamma[samp],xlab=expression(log(sigma)),ylab=expression(log(sigma_gamma)),pch=".",cex=0.1)
+par(mfrow=c(3,2),mar=c(4,4,1,1))
+plot(mh$mu_gamma[samp],mh$log_alpha[samp],xlab=expression(mu_gamma),ylab=expression(log(alpha)),pch=".",cex=0.1)
+plot(mh$mu_gamma[samp],mh$delta[samp],xlab=expression(mu_gamma),ylab=expression(delta),pch=".",cex=0.1)
+plot(mh$mu_gamma[samp],mh$log_sigma[samp],xlab=expression(mu_gamma),ylab=expression(log(sigma)),pch=".",cex=0.1)
+plot(mh$mu_gamma[samp],mh$log_sigma_gamma[samp],xlab=expression(mu_gamma),ylab=expression(log(sigma_gamma)),pch=".",cex=0.1)
+```
